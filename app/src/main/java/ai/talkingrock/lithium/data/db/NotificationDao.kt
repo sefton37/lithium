@@ -60,4 +60,11 @@ interface NotificationDao {
 
     @Query("SELECT * FROM notifications WHERE id = :id LIMIT 1")
     suspend fun getById(id: Long): NotificationRecord?
+
+    /**
+     * Writes the AI classification result for a single notification.
+     * Called by [ai.talkingrock.lithium.ai.AiAnalysisWorker] after each inference pass.
+     */
+    @Query("UPDATE notifications SET ai_classification = :classification, ai_confidence = :confidence WHERE id = :id")
+    suspend fun updateClassification(id: Long, classification: String, confidence: Float)
 }
