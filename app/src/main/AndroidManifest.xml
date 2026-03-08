@@ -41,6 +41,33 @@
         </activity>
 
         <!--
+            NotificationListenerService — requires user to grant access in
+            Settings > Apps > Special app access > Notification access.
+            The BIND_NOTIFICATION_LISTENER_SERVICE permission ensures only the
+            system can bind to this service.
+        -->
+        <service
+            android:name=".service.LithiumNotificationListener"
+            android:exported="true"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
+        <!--
+            BootReceiver — re-enqueues WorkManager jobs after device reboot (M3).
+            M1: no-op placeholder.
+        -->
+        <receiver
+            android:name=".service.BootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
+        <!--
             Disable WorkManager's auto-initialization so LithiumApp can supply
             its own Configuration.Provider with the HiltWorkerFactory.
             Without this, the app crashes with a duplicate initialization error.

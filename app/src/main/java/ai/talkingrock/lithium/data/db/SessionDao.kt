@@ -8,7 +8,9 @@ import ai.talkingrock.lithium.data.model.SessionRecord
 import kotlinx.coroutines.flow.Flow
 
 /**
- * DAO for [SessionRecord]. Phase 0 stub — full implementation in M1.
+ * DAO for [SessionRecord].
+ *
+ * Session records are written by UsageTracker (M2) when a notification tap leads to an app session.
  */
 @Dao
 interface SessionDao {
@@ -16,6 +18,14 @@ interface SessionDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(session: SessionRecord): Long
 
+    /** Returns the most recent session, or null if no sessions exist. */
     @Query("SELECT * FROM sessions ORDER BY started_at_ms DESC LIMIT 1")
     fun getLatest(): Flow<SessionRecord?>
+
+    /**
+     * Returns all sessions that started within the given time range, newest first.
+     * Used by PatternAnalyzer (M4) for the 24h reporting window.
+     */
+    @Query("SELECT * FROM sessions WHERE started_at_ms >= :sinceMs ORDER BY started_at_ms DESC")
+    suspend fun getSessionsSince(sinceMs: Long): List<SessionRecord>
 }

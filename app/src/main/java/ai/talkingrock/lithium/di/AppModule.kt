@@ -18,6 +18,9 @@ import javax.inject.Singleton
  * - [Context] (application context, via @ApplicationContext — Hilt built-in qualifier)
  * - [EncryptedSharedPreferences] for user settings and config values that must
  *   survive process death but never appear in backups.
+ *
+ * Note: [ai.talkingrock.lithium.service.ListenerState] is a @Singleton with an @Inject
+ * constructor — Hilt provides it automatically without an explicit @Provides method here.
  */
 @Module
 @InstallIn(SingletonComponent::class)

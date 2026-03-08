@@ -10,9 +10,8 @@ import kotlinx.coroutines.flow.Flow
 /**
  * DAO for [NotificationRecord].
  *
- * Phase 0: minimal method set required for Room to compile the database.
- * Full query set (getRecent, getUnclassified, getByPackage, deleteOlderThan, etc.)
- * implemented in M1.
+ * Insert/update methods are suspend functions — called from the NotificationListenerService
+ * coroutine scope. Query methods returning lists use Flow for reactive UI observation.
  */
 @Dao
 interface NotificationDao {
@@ -20,6 +19,42 @@ interface NotificationDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOrReplace(record: NotificationRecord): Long
 
+    /**
+     * Record the removal time and reason for a notification that was previously inserted.
+     * Called from [onNotificationRemoved] in the listener service.
+     */
+    @Query("UPDATE notifications SET removed_at_ms = :removedAtMs, removal_reason = :reason WHERE id = :id")
+    suspend fun updateRemoval(id: Long, removedAtMs: Long, reason: String)
+
+    /**
+     * Returns all notifications posted at or after [sinceMs], newest first.
+     * Primary query for the debug notification log and briefing screen.
+     */
+    @Query("SELECT * FROM notifications WHERE posted_at_ms >= :sinceMs ORDER BY posted_at_ms DESC")
+    fun getRecent(sinceMs: Long): Flow<List<NotificationRecord>>
+
+    /**
+     * Returns up to [limit] notifications that have not yet been classified by the AI worker.
+     * Oldest first so the worker processes in chronological order.
+     * Not a Flow — called once inside the WorkManager worker, not observed.
+     */
+    @Query("SELECT * FROM notifications WHERE ai_classification IS NULL ORDER BY posted_at_ms ASC LIMIT :limit")
+    suspend fun getUnclassified(limit: Int): List<NotificationRecord>
+
+    /**
+     * Returns all notifications from a specific package, newest first.
+     */
+    @Query("SELECT * FROM notifications WHERE package_name = :packageName ORDER BY posted_at_ms DESC")
+    fun getByPackage(packageName: String): Flow<List<NotificationRecord>>
+
+    /**
+     * Hard-deletes notifications older than [thresholdMs].
+     * Called periodically to enforce the retention policy.
+     */
+    @Query("DELETE FROM notifications WHERE posted_at_ms < :thresholdMs")
+    suspend fun deleteOlderThan(thresholdMs: Long)
+
+    /** Returns all notifications, newest first. Used by the debug log screen. */
     @Query("SELECT * FROM notifications ORDER BY posted_at_ms DESC")
     fun getAll(): Flow<List<NotificationRecord>>
 
