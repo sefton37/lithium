@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Diagnostics module manifest.
+
+    INTERNET is declared here rather than in the main app manifest.
+    This module is excluded from release builds and production-flagged
+    debug builds via -PexcludeDiagnostics.
+
+    The main app has NO INTERNET permission. This module is the only
+    place in the project where network access is permitted, and only
+    for local (loopback) diagnostic tooling — never external connections.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+
+</manifest>

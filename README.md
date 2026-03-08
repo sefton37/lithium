@@ -22,7 +22,7 @@ LITHIUM sits between you and your notifications. It watches what comes in, learn
 6. You review suggestions in a chat-style interface — yes, no, or write your own comment on each item
 7. Approved suggestions become active filter rules
 
-**The goal:** Spam-like notifications go away. You never get sucked into TikTok or Instagram because someone added a story or an influencer was recommended. Either it's a message that relates to you (a DM from a contact, an email from someone in your contact list) or it's gone. Same logic for email — spam inbox notifications vs an email from someone who matters.
+**The value proposition:** The AI learns from your actual usage — what you tap, what you ignore, what pulls you into hour-long sessions — and uses that to eliminate what is spam *relative to you*. It then proposes what you actually care about based on your behavior, not some generic filter. A DM from a friend passes through. An algorithmic engagement notification you've never once acted on gets killed. Same logic for email — if you never open marketing blasts but always read messages from real people, the AI figures that out and suggests rules accordingly.
 
 This is the program that helps you fight back against attention extraction and budget your time. All on device, always reviewable by you.
 

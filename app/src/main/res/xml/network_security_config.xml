@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Enforces HTTPS-only at the OS level.
+    Combined with android:usesCleartextTraffic="false" in the manifest,
+    this creates two layers of cleartext blocking. The main app has no
+    INTERNET permission, so this config is belt-and-suspenders for any
+    WebView or library code that might attempt a connection.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

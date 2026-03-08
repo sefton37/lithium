@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Minimal theme definition required for the manifest android:theme reference.
+    The actual Compose theme is defined in ui/theme/Theme.kt.
+    We inherit from Theme.Material3 to satisfy the Activity requirement while
+    Compose takes over all rendering.
+-->
+<resources>
+    <!--
+        Inherits from the framework's dark material theme to avoid a white flash
+        during Activity launch before Compose draws its first frame.
+        Theme.Material.NoTitleBar is available without AppCompat dependency.
+        Compose takes over all rendering after the first frame.
+    -->
+    <style name="Theme.Lithium" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:statusBarColor">@android:color/black</item>
+        <item name="android:navigationBarColor">@android:color/black</item>
+    </style>
+</resources>

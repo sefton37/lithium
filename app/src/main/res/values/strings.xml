@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Lithium</string>
+
+    <!-- Screen titles -->
+    <string name="screen_setup">Setup</string>
+    <string name="screen_briefing">Briefing</string>
+    <string name="screen_queue">Queue</string>
+    <string name="screen_rules">Rules</string>
+    <string name="screen_settings">Settings</string>
+
+    <!-- Permission rationales -->
+    <string name="permission_notification_listener_rationale">
+        Lithium needs notification access to monitor, classify, and queue your notifications.
+        Nothing leaves this device.
+    </string>
+    <string name="permission_usage_stats_rationale">
+        Usage stats help Lithium understand which apps you actively use,
+        improving notification priority scoring.
+    </string>
+
+    <!-- Placeholder text -->
+    <string name="todo_placeholder">Coming soon</string>
+</resources>

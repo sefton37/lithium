@@ -1,0 +1,22 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<!--
+3    Diagnostics module manifest.
+4
+5    INTERNET is declared here rather than in the main app manifest.
+6    This module is excluded from release builds and production-flagged
+7    debug builds via -PexcludeDiagnostics.
+8
+9    The main app has NO INTERNET permission. This module is the only
+10    place in the project where network access is permitted, and only
+11    for local (loopback) diagnostic tooling — never external connections.
+12-->
+13<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+14    package="ai.talkingrock.lithium.diagnostics" >
+15
+16    <uses-sdk android:minSdkVersion="29" />
+17
+18    <uses-permission android:name="android.permission.INTERNET" />
+18-->/home/kellogg/dev/Lithium/diagnostics/src/main/AndroidManifest.xml:15:5-67
+18-->/home/kellogg/dev/Lithium/diagnostics/src/main/AndroidManifest.xml:15:22-64
+19
+20</manifest>
