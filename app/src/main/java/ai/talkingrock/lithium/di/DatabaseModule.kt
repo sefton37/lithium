@@ -5,6 +5,8 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -59,6 +61,22 @@ object DatabaseModule {
 
     private const val KEYSTORE_ALIAS = "lithium_db_key_v1"
     private const val KEYSTORE_PROVIDER = "AndroidKeyStore"
+
+    /**
+     * Migration from schema version 1 (Phase 0/M1 scaffold) to version 2 (M2 Correlate).
+     *
+     * Changes:
+     * - notifications: add `is_from_contact` INTEGER NOT NULL DEFAULT 0
+     * - sessions: add `package_name` TEXT NOT NULL DEFAULT '',
+     *             add `duration_ms` INTEGER (nullable)
+     */
+    val MIGRATION_1_2 = object : Migration(1, 2) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE notifications ADD COLUMN is_from_contact INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE sessions ADD COLUMN package_name TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE sessions ADD COLUMN duration_ms INTEGER")
+        }
+    }
 
     /**
      * Fixed 32-byte plaintext that the Keystore key encrypts to produce the passphrase.
@@ -141,6 +159,7 @@ object DatabaseModule {
         )
             .openHelperFactory(factory)
             .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
+            .addMigrations(MIGRATION_1_2)
             // No fallback destructive migration — force explicit migrations.
             // If a migration is missing, the app crashes loudly rather than
             // silently wiping user data.

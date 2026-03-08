@@ -50,5 +50,9 @@ data class NotificationRecord(
     val aiConfidence: Float? = null,
 
     @ColumnInfo(name = "rule_id_matched")
-    val ruleIdMatched: Long? = null
+    val ruleIdMatched: Long? = null,
+
+    /** True if the notification sender was found in the device contacts. Set by ContactsResolver. */
+    @ColumnInfo(name = "is_from_contact")
+    val isFromContact: Boolean = false
 )

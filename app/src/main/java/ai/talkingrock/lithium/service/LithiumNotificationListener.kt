@@ -10,13 +10,17 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import ai.talkingrock.lithium.data.model.NotificationRecord
 import ai.talkingrock.lithium.data.repository.NotificationRepository
+import ai.talkingrock.lithium.data.repository.SessionRepository
+import ai.talkingrock.lithium.engine.ContactsResolver
 import ai.talkingrock.lithium.engine.RuleAction
 import ai.talkingrock.lithium.engine.RuleEngine
+import ai.talkingrock.lithium.engine.UsageTracker
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -44,8 +48,11 @@ import javax.inject.Inject
 class LithiumNotificationListener : NotificationListenerService() {
 
     @Inject lateinit var notificationRepo: NotificationRepository
+    @Inject lateinit var sessionRepo: SessionRepository
     @Inject lateinit var ruleEngine: RuleEngine
     @Inject lateinit var listenerState: ListenerState
+    @Inject lateinit var contactsResolver: ContactsResolver
+    @Inject lateinit var usageTracker: UsageTracker
 
     private lateinit var serviceScope: CoroutineScope
 
@@ -105,9 +112,23 @@ class LithiumNotificationListener : NotificationListenerService() {
         val removedAtMs = System.currentTimeMillis()
         val reasonString = removalReasonString(reason)
         val rowId = keyToRowId.remove(sbn.key) ?: return
+        val packageName = sbn.packageName
 
         serviceScope.launch {
             notificationRepo.updateRemoval(rowId, removedAtMs, reasonString)
+        }
+
+        // When the user taps a notification, measure the resulting app session.
+        // Delay 5 seconds to allow the app to come to foreground before querying usage events.
+        if (reason == REASON_CLICK) {
+            serviceScope.launch {
+                delay(TAP_SESSION_DELAY_MS)
+                val session = usageTracker.measureSessionAfterTap(packageName, removedAtMs)
+                if (session != null) {
+                    sessionRepo.insert(session)
+                    Log.d(TAG, "Session recorded for $packageName: duration=${session.durationMs}ms")
+                }
+            }
         }
     }
 
@@ -117,6 +138,9 @@ class LithiumNotificationListener : NotificationListenerService() {
 
     private fun buildRecord(sbn: StatusBarNotification): NotificationRecord {
         val extras = sbn.notification.extras
+        // isSenderInContacts is synchronous; it hits the LRU cache on repeat senders
+        // and gracefully returns false if READ_CONTACTS permission is absent.
+        val isFromContact = contactsResolver.isSenderInContacts(sbn)
         return NotificationRecord(
             packageName = sbn.packageName,
             postedAtMs = sbn.postTime,
@@ -125,6 +149,7 @@ class LithiumNotificationListener : NotificationListenerService() {
             channelId = sbn.notification.channelId,
             category = sbn.notification.category,
             isOngoing = sbn.isOngoing,
+            isFromContact = isFromContact,
         )
     }
 
@@ -182,5 +207,8 @@ class LithiumNotificationListener : NotificationListenerService() {
     companion object {
         private const val TAG = "LithiumListener"
         private const val NUDGE_NOTIFICATION_ID = 1001
+
+        /** Delay before querying usage events after a notification tap, to allow app launch. */
+        private const val TAP_SESSION_DELAY_MS = 5_000L
     }
 }

@@ -25,6 +25,8 @@ import ai.talkingrock.lithium.data.model.QueuedNotification
  *
  * Version history:
  * - 1: Phase 0 scaffold — all 6 tables created.
+ * - 2: M2 Correlate — added `is_from_contact` to notifications;
+ *      added `package_name` and `duration_ms` to sessions.
  */
 @Database(
     entities = [
@@ -35,7 +37,7 @@ import ai.talkingrock.lithium.data.model.QueuedNotification
         Suggestion::class,
         QueuedNotification::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = true
 )
 abstract class LithiumDatabase : RoomDatabase() {
