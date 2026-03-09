@@ -58,6 +58,13 @@ interface NotificationDao {
     @Query("SELECT * FROM notifications ORDER BY posted_at_ms DESC")
     fun getAll(): Flow<List<NotificationRecord>>
 
+    /**
+     * One-shot (non-Flow) variant of [getRecent] for use in WorkManager workers and
+     * analytics passes that need a snapshot without setting up a reactive observer.
+     */
+    @Query("SELECT * FROM notifications WHERE posted_at_ms >= :sinceMs ORDER BY posted_at_ms DESC")
+    suspend fun getAllSince(sinceMs: Long): List<NotificationRecord>
+
     @Query("SELECT * FROM notifications WHERE id = :id LIMIT 1")
     suspend fun getById(id: Long): NotificationRecord?
 
