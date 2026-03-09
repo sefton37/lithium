@@ -58,4 +58,14 @@ class NotificationRepository @Inject constructor(
     suspend fun getDistinctPackageNames(): List<String> = withContext(Dispatchers.IO) {
         dao.getDistinctPackageNames()
     }
+
+    /** Returns the total count of notification records. Used by the Settings screen. */
+    suspend fun getCount(): Int = withContext(Dispatchers.IO) {
+        dao.count()
+    }
+
+    /** Delete all notification records. Used by purge-all-data. */
+    suspend fun deleteAll() = withContext(Dispatchers.IO) {
+        dao.deleteAll()
+    }
 }

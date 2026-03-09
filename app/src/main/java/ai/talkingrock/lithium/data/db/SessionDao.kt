@@ -28,4 +28,12 @@ interface SessionDao {
      */
     @Query("SELECT * FROM sessions WHERE started_at_ms >= :sinceMs ORDER BY started_at_ms DESC")
     suspend fun getSessionsSince(sinceMs: Long): List<SessionRecord>
+
+    /** Hard-deletes sessions older than [thresholdMs]. Called by data-retention cleanup. */
+    @Query("DELETE FROM sessions WHERE started_at_ms < :thresholdMs")
+    suspend fun deleteOlderThan(thresholdMs: Long)
+
+    /** Delete all session records. Used by purge-all-data. */
+    @Query("DELETE FROM sessions")
+    suspend fun deleteAll()
 }

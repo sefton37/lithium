@@ -4,11 +4,8 @@ import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Home
@@ -33,8 +30,10 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import ai.talkingrock.lithium.ui.briefing.BriefingScreen
 import ai.talkingrock.lithium.ui.debug.DebugNotificationLogScreen
+import ai.talkingrock.lithium.ui.queue.QueueScreen
 import ai.talkingrock.lithium.ui.rules.AddRuleScreen
 import ai.talkingrock.lithium.ui.rules.RulesScreen
+import ai.talkingrock.lithium.ui.settings.SettingsScreen
 import ai.talkingrock.lithium.ui.setup.SetupScreen
 import ai.talkingrock.lithium.ui.theme.LithiumTheme
 import dagger.hilt.android.AndroidEntryPoint
@@ -122,10 +121,7 @@ private fun LithiumNavHost() {
             }
 
             composable(Screen.Queue.route) {
-                // M5: Queue screen
-                Box(Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
-                    Text("TODO: Queue screen")
-                }
+                QueueScreen()
             }
 
             composable(Screen.Rules.route) {
@@ -143,10 +139,7 @@ private fun LithiumNavHost() {
             }
 
             composable(Screen.Settings.route) {
-                // M5: Settings screen
-                Box(Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
-                    Text("TODO: Settings screen")
-                }
+                SettingsScreen()
             }
 
             // Debug log — only reachable in debug builds.

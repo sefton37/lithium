@@ -28,4 +28,8 @@ interface SuggestionDao {
      */
     @Query("SELECT COUNT(*) FROM suggestions WHERE report_id = :reportId AND status = 'pending'")
     suspend fun countPendingForReport(reportId: Long): Int
+
+    /** Delete all suggestion records. Used by purge-all-data. */
+    @Query("DELETE FROM suggestions")
+    suspend fun deleteAll()
 }

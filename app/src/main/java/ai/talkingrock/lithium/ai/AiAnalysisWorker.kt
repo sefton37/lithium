@@ -1,11 +1,13 @@
 package ai.talkingrock.lithium.ai
 
 import android.content.Context
+import android.content.SharedPreferences
 import android.util.Log
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import ai.talkingrock.lithium.data.db.NotificationDao
+import ai.talkingrock.lithium.data.db.SessionDao
 import ai.talkingrock.lithium.data.repository.ReportRepository
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
@@ -35,11 +37,13 @@ class AiAnalysisWorker @AssistedInject constructor(
     @Assisted appContext: Context,
     @Assisted workerParams: WorkerParameters,
     private val notificationDao: NotificationDao,
+    private val sessionDao: SessionDao,
     private val classifier: NotificationClassifier,
     private val patternAnalyzer: PatternAnalyzer,
     private val reportGenerator: ReportGenerator,
     private val suggestionGenerator: SuggestionGenerator,
-    private val reportRepository: ReportRepository
+    private val reportRepository: ReportRepository,
+    private val sharedPreferences: SharedPreferences
 ) : CoroutineWorker(appContext, workerParams) {
 
     override suspend fun doWork(): Result {
@@ -138,6 +142,21 @@ class AiAnalysisWorker @AssistedInject constructor(
             Log.d(TAG, "doWork: no suggestions generated")
         }
 
+        // ---------------------------------------------------------------------------------
+        // Step 5: Data retention cleanup — delete records older than configured retention
+        // ---------------------------------------------------------------------------------
+        val retentionDays = sharedPreferences.getInt(PREF_RETENTION_DAYS, DEFAULT_RETENTION_DAYS)
+        val retentionMs = retentionDays * 24L * 60L * 60L * 1000L
+        val retentionThresholdMs = System.currentTimeMillis() - retentionMs
+        try {
+            notificationDao.deleteOlderThan(retentionThresholdMs)
+            sessionDao.deleteOlderThan(retentionThresholdMs)
+            Log.d(TAG, "doWork: retention cleanup complete — threshold=$retentionThresholdMs (${retentionDays}d)")
+        } catch (e: Exception) {
+            Log.e(TAG, "doWork: retention cleanup failed", e)
+            // Non-fatal: cleanup will retry on the next worker run.
+        }
+
         Log.d(TAG, "doWork: analysis pass complete")
         return Result.success()
     }
@@ -153,5 +172,11 @@ class AiAnalysisWorker @AssistedInject constructor(
 
         /** Analysis window: 24 hours in milliseconds. */
         const val ANALYSIS_WINDOW_MS = 24 * 60 * 60 * 1000L
+
+        /** SharedPreferences key for the user-configured data retention period (days). */
+        const val PREF_RETENTION_DAYS = "data_retention_days"
+
+        /** Default data retention period if the user has not configured one. */
+        const val DEFAULT_RETENTION_DAYS = 30
     }
 }

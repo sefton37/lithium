@@ -5,9 +5,10 @@ import androidx.lifecycle.viewModelScope
 import ai.talkingrock.lithium.data.model.Rule
 import ai.talkingrock.lithium.data.repository.RuleRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -36,17 +37,19 @@ class RulesViewModel @Inject constructor(
     private val ruleRepository: RuleRepository
 ) : ViewModel() {
 
-    // Tracks which rule card is expanded for detail display (ephemeral, not persisted).
-    private var expandedRuleId: Long? = null
+    // MutableStateFlow so that expand/collapse triggers recomposition.
+    private val _expandedRuleId = MutableStateFlow<Long?>(null)
 
-    val uiState: StateFlow<RulesUiState> = ruleRepository.getAll()
-        .map { rules ->
-            RulesUiState(
-                rules = rules,
-                isLoading = false,
-                expandedRuleId = expandedRuleId
-            )
-        }
+    val uiState: StateFlow<RulesUiState> = combine(
+        ruleRepository.getAll(),
+        _expandedRuleId
+    ) { rules, expandedId ->
+        RulesUiState(
+            rules = rules,
+            isLoading = false,
+            expandedRuleId = expandedId
+        )
+    }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5_000),
@@ -74,6 +77,6 @@ class RulesViewModel @Inject constructor(
 
     /** Expands or collapses the detail view for a rule card. */
     fun toggleExpanded(ruleId: Long) {
-        expandedRuleId = if (expandedRuleId == ruleId) null else ruleId
+        _expandedRuleId.value = if (_expandedRuleId.value == ruleId) null else ruleId
     }
 }

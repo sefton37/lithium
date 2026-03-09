@@ -21,4 +21,12 @@ interface ReportDao {
 
     @Query("UPDATE reports SET reviewed = 1 WHERE id = :id")
     suspend fun markReviewed(id: Long)
+
+    /** Delete all report records. Used by purge-all-data. */
+    @Query("DELETE FROM reports")
+    suspend fun deleteAll()
+
+    /** Returns approximate count of rows in reports table. */
+    @Query("SELECT COUNT(*) FROM reports")
+    suspend fun count(): Int
 }

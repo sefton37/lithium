@@ -81,4 +81,12 @@ interface NotificationDao {
      */
     @Query("SELECT DISTINCT package_name FROM notifications ORDER BY package_name ASC")
     suspend fun getDistinctPackageNames(): List<String>
+
+    /** Returns approximate count of rows in the notifications table. */
+    @Query("SELECT COUNT(*) FROM notifications")
+    suspend fun count(): Int
+
+    /** Delete all notification records. Used by purge-all-data. */
+    @Query("DELETE FROM notifications")
+    suspend fun deleteAll()
 }
