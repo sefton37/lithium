@@ -1,5 +1,6 @@
 package ai.talkingrock.lithium.ui.briefing
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,12 +12,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -35,7 +39,8 @@ import kotlinx.serialization.json.jsonPrimitive
  * Briefing screen — the home screen of Lithium.
  *
  * Shows the latest unreviewed AI-generated report and any pending suggestion cards.
- * Suggestion approval is wired in M5; for now the cards are display-only.
+ * Yes/No buttons are wired to [BriefingViewModel.approveSuggestion] and
+ * [BriefingViewModel.rejectSuggestion]. An optional comment field appears on tap.
  *
  * Design: Material 3, dark theme, high contrast, minimum 48dp tap targets.
  */
@@ -48,7 +53,7 @@ fun BriefingScreen(
     when {
         uiState.isLoading -> LoadingState()
         uiState.report == null -> EmptyState()
-        else -> ReportContent(uiState = uiState)
+        else -> ReportContent(uiState = uiState, viewModel = viewModel)
     }
 }
 
@@ -93,7 +98,10 @@ private fun EmptyState() {
 }
 
 @Composable
-private fun ReportContent(uiState: BriefingUiState) {
+private fun ReportContent(
+    uiState: BriefingUiState,
+    viewModel: BriefingViewModel
+) {
     val report = uiState.report ?: return
 
     // Extract the human-readable text from the JSON summary.
@@ -140,7 +148,15 @@ private fun ReportContent(uiState: BriefingUiState) {
             )
 
             uiState.suggestions.forEach { suggestion ->
-                SuggestionCard(suggestion = suggestion)
+                SuggestionCard(
+                    suggestion = suggestion,
+                    commentDraft = uiState.commentDrafts[suggestion.id] ?: "",
+                    isCommentExpanded = uiState.expandedCommentId == suggestion.id,
+                    onApprove = { viewModel.approveSuggestion(suggestion, report.id) },
+                    onReject = { viewModel.rejectSuggestion(suggestion, report.id) },
+                    onCommentChange = { text -> viewModel.updateCommentDraft(suggestion.id, text) },
+                    onToggleComment = { viewModel.toggleCommentExpanded(suggestion.id) }
+                )
             }
         }
 
@@ -150,7 +166,15 @@ private fun ReportContent(uiState: BriefingUiState) {
 }
 
 @Composable
-private fun SuggestionCard(suggestion: Suggestion) {
+private fun SuggestionCard(
+    suggestion: Suggestion,
+    commentDraft: String,
+    isCommentExpanded: Boolean,
+    onApprove: () -> Unit,
+    onReject: () -> Unit,
+    onCommentChange: (String) -> Unit,
+    onToggleComment: () -> Unit
+) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -181,15 +205,40 @@ private fun SuggestionCard(suggestion: Suggestion) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
+            // Optional comment toggle — tap "Add comment" to expand the field.
+            TextButton(
+                onClick = onToggleComment,
+                modifier = Modifier.height(36.dp)
+            ) {
+                Text(
+                    text = if (isCommentExpanded) "Hide comment" else "Add comment",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+            }
+
+            // Comment field — animated in/out
+            AnimatedVisibility(visible = isCommentExpanded) {
+                OutlinedTextField(
+                    value = commentDraft,
+                    onValueChange = onCommentChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Comment (optional)") },
+                    singleLine = false,
+                    maxLines = 3,
+                    textStyle = MaterialTheme.typography.bodySmall
+                )
+            }
+
             Spacer(Modifier.height(4.dp))
 
-            // Yes / No buttons — wired in M5; currently present for layout fidelity.
+            // Yes / No buttons
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                OutlinedButton(
-                    onClick = { /* M5: accept suggestion */ },
+                Button(
+                    onClick = onApprove,
                     modifier = Modifier
                         .weight(1f)
                         .height(48.dp)
@@ -197,7 +246,7 @@ private fun SuggestionCard(suggestion: Suggestion) {
                     Text("Yes, try it")
                 }
                 OutlinedButton(
-                    onClick = { /* M5: reject suggestion */ },
+                    onClick = onReject,
                     modifier = Modifier
                         .weight(1f)
                         .height(48.dp)

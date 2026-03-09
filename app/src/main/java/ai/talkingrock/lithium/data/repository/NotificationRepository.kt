@@ -50,4 +50,12 @@ class NotificationRepository @Inject constructor(
 
     /** Reactive stream of all notifications, newest first. Used by the debug log screen. */
     fun getAll(): Flow<List<NotificationRecord>> = dao.getAll()
+
+    /**
+     * Returns distinct package names from all observed notifications, sorted alphabetically.
+     * Used by the Add Rule screen to populate the app selector.
+     */
+    suspend fun getDistinctPackageNames(): List<String> = withContext(Dispatchers.IO) {
+        dao.getDistinctPackageNames()
+    }
 }

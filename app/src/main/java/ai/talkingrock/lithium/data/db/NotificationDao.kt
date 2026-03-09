@@ -74,4 +74,11 @@ interface NotificationDao {
      */
     @Query("UPDATE notifications SET ai_classification = :classification, ai_confidence = :confidence WHERE id = :id")
     suspend fun updateClassification(id: Long, classification: String, confidence: Float)
+
+    /**
+     * Returns distinct package names from all recorded notifications, sorted alphabetically.
+     * Used by the Add Rule screen to populate the app selector.
+     */
+    @Query("SELECT DISTINCT package_name FROM notifications ORDER BY package_name ASC")
+    suspend fun getDistinctPackageNames(): List<String>
 }

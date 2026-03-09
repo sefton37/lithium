@@ -33,6 +33,8 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import ai.talkingrock.lithium.ui.briefing.BriefingScreen
 import ai.talkingrock.lithium.ui.debug.DebugNotificationLogScreen
+import ai.talkingrock.lithium.ui.rules.AddRuleScreen
+import ai.talkingrock.lithium.ui.rules.RulesScreen
 import ai.talkingrock.lithium.ui.setup.SetupScreen
 import ai.talkingrock.lithium.ui.theme.LithiumTheme
 import dagger.hilt.android.AndroidEntryPoint
@@ -127,10 +129,17 @@ private fun LithiumNavHost() {
             }
 
             composable(Screen.Rules.route) {
-                // M5: Rules screen
-                Box(Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
-                    Text("TODO: Rules screen")
-                }
+                RulesScreen(
+                    onAddRule = {
+                        navController.navigate(Screen.AddRule.route)
+                    }
+                )
+            }
+
+            composable(Screen.AddRule.route) {
+                AddRuleScreen(
+                    onSaved = { navController.popBackStack() }
+                )
             }
 
             composable(Screen.Settings.route) {
@@ -228,6 +237,7 @@ sealed class Screen(val route: String) {
     object Briefing : Screen("briefing")
     object Queue    : Screen("queue")
     object Rules    : Screen("rules")
+    object AddRule  : Screen("add_rule")
     object Settings : Screen("settings")
     object DebugLog : Screen("debug_log")
 }

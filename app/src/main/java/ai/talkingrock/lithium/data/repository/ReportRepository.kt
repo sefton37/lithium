@@ -49,4 +49,13 @@ class ReportRepository @Inject constructor(
         withContext(Dispatchers.IO) {
             suggestionDao.updateStatus(id, status, comment)
         }
+
+    /**
+     * Returns the number of pending (unreviewed) suggestions for a report.
+     * When this reaches zero after the user actions the last suggestion, the report
+     * should be marked reviewed.
+     */
+    suspend fun countPendingSuggestions(reportId: Long): Int = withContext(Dispatchers.IO) {
+        suggestionDao.countPendingForReport(reportId)
+    }
 }

@@ -2,6 +2,7 @@ package ai.talkingrock.lithium.data.repository
 
 import ai.talkingrock.lithium.data.db.RuleDao
 import ai.talkingrock.lithium.data.model.Rule
+import ai.talkingrock.lithium.data.model.Suggestion
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -59,5 +60,36 @@ class RuleRepository @Inject constructor(
 
     suspend fun getById(id: Long): Rule? = withContext(Dispatchers.IO) {
         dao.getById(id)
+    }
+
+    /**
+     * Creates an approved [Rule] from an accepted [Suggestion].
+     * The suggestion's rationale becomes the rule name; the condition_json is copied directly.
+     * Returns the generated row ID of the new rule.
+     */
+    suspend fun createFromSuggestion(suggestion: Suggestion): Long = withContext(Dispatchers.IO) {
+        val rule = Rule(
+            name = suggestion.rationale,
+            conditionJson = suggestion.conditionJson,
+            action = suggestion.action,
+            status = "approved",
+            createdAtMs = System.currentTimeMillis(),
+            source = "ai"
+        )
+        dao.insertRule(rule)
+    }
+
+    /** Hard-deletes a rule by ID. */
+    suspend fun deleteRule(id: Long) = withContext(Dispatchers.IO) {
+        dao.deleteById(id)
+    }
+
+    /**
+     * Toggles a rule's status between [activeStatus] and [disabledStatus].
+     * If the rule is currently [activeStatus], it becomes [disabledStatus], and vice versa.
+     */
+    suspend fun toggleStatus(id: Long, currentStatus: String) = withContext(Dispatchers.IO) {
+        val newStatus = if (currentStatus == "approved") "disabled" else "approved"
+        dao.updateStatus(id, newStatus)
     }
 }

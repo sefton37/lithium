@@ -21,4 +21,11 @@ interface SuggestionDao {
 
     @Query("UPDATE suggestions SET status = :status, user_comment = :comment WHERE id = :id")
     suspend fun updateStatus(id: Long, status: String, comment: String?)
+
+    /**
+     * Returns the count of pending suggestions for a report.
+     * Used to determine when all suggestions have been reviewed so the report can be marked reviewed.
+     */
+    @Query("SELECT COUNT(*) FROM suggestions WHERE report_id = :reportId AND status = 'pending'")
+    suspend fun countPendingForReport(reportId: Long): Int
 }

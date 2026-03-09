@@ -41,4 +41,8 @@ interface RuleDao {
 
     @Query("SELECT * FROM rules WHERE id = :id LIMIT 1")
     suspend fun getById(id: Long): Rule?
+
+    /** Hard-deletes a rule by ID. */
+    @Query("DELETE FROM rules WHERE id = :id")
+    suspend fun deleteById(id: Long)
 }
