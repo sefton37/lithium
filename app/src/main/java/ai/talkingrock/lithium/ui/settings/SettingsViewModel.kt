@@ -10,6 +10,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import ai.talkingrock.lithium.ai.AiAnalysisWorker.Companion.DEFAULT_RETENTION_DAYS
 import ai.talkingrock.lithium.ai.AiAnalysisWorker.Companion.PREF_RETENTION_DAYS
+import ai.talkingrock.lithium.data.db.AppBehaviorProfileDao
 import ai.talkingrock.lithium.data.db.NotificationDao
 import ai.talkingrock.lithium.data.db.QueueDao
 import ai.talkingrock.lithium.data.db.ReportDao
@@ -77,7 +78,8 @@ class SettingsViewModel @Inject constructor(
     private val sessionDao: SessionDao,
     private val reportDao: ReportDao,
     private val suggestionDao: SuggestionDao,
-    private val queueDao: QueueDao
+    private val queueDao: QueueDao,
+    private val behaviorProfileDao: AppBehaviorProfileDao
 ) : ViewModel() {
 
     companion object {
@@ -162,6 +164,7 @@ class SettingsViewModel @Inject constructor(
                 reportDao.deleteAll()
                 suggestionDao.deleteAll()
                 queueDao.deleteAll()
+                behaviorProfileDao.deleteAll()
                 _uiState.update { it.copy(
                     isPurging = false,
                     purgeComplete = true,

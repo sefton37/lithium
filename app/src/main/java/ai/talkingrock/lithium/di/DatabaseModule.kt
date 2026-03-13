@@ -19,6 +19,7 @@ import ai.talkingrock.lithium.data.db.SessionDao
 import ai.talkingrock.lithium.data.db.RuleDao
 import ai.talkingrock.lithium.data.db.ReportDao
 import ai.talkingrock.lithium.data.db.SuggestionDao
+import ai.talkingrock.lithium.data.db.AppBehaviorProfileDao
 import ai.talkingrock.lithium.data.db.QueueDao
 import java.security.KeyStore
 import javax.crypto.Cipher
@@ -75,6 +76,48 @@ object DatabaseModule {
             db.execSQL("ALTER TABLE notifications ADD COLUMN is_from_contact INTEGER NOT NULL DEFAULT 0")
             db.execSQL("ALTER TABLE sessions ADD COLUMN package_name TEXT NOT NULL DEFAULT ''")
             db.execSQL("ALTER TABLE sessions ADD COLUMN duration_ms INTEGER")
+        }
+    }
+
+    /**
+     * Migration from schema version 2 to version 3 (Behavioral Learning).
+     *
+     * Adds the `app_behavior_profiles` table that accumulates per-(package, channel)
+     * engagement stats across all time, enabling the classifier and suggestion engine
+     * to learn from user behavior.
+     */
+    val MIGRATION_2_3 = object : Migration(2, 3) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS app_behavior_profiles (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    package_name TEXT NOT NULL,
+                    channel_id TEXT NOT NULL,
+                    dominant_category TEXT NOT NULL,
+                    total_received INTEGER NOT NULL,
+                    total_tapped INTEGER NOT NULL,
+                    total_dismissed INTEGER NOT NULL,
+                    total_auto_removed INTEGER NOT NULL,
+                    total_sessions INTEGER NOT NULL,
+                    total_session_ms INTEGER NOT NULL,
+                    category_vote_personal INTEGER NOT NULL,
+                    category_vote_engagement_bait INTEGER NOT NULL,
+                    category_vote_promotional INTEGER NOT NULL,
+                    category_vote_transactional INTEGER NOT NULL,
+                    category_vote_system INTEGER NOT NULL,
+                    category_vote_social_signal INTEGER NOT NULL,
+                    user_reclassified TEXT,
+                    user_reclassified_at_ms INTEGER,
+                    first_seen_ms INTEGER NOT NULL,
+                    last_seen_ms INTEGER NOT NULL,
+                    last_updated_ms INTEGER NOT NULL,
+                    profile_version INTEGER NOT NULL
+                )
+            """.trimIndent())
+            db.execSQL("""
+                CREATE UNIQUE INDEX IF NOT EXISTS index_app_behavior_profiles_package_name_channel_id
+                    ON app_behavior_profiles(package_name, channel_id)
+            """.trimIndent())
         }
     }
 
@@ -164,7 +207,7 @@ object DatabaseModule {
         )
             .openHelperFactory(factory)
             .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
-            .addMigrations(MIGRATION_1_2)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
             // No fallback destructive migration — force explicit migrations.
             // If a migration is missing, the app crashes loudly rather than
             // silently wiping user data.
@@ -188,4 +231,8 @@ object DatabaseModule {
 
     @Provides
     fun provideQueueDao(db: LithiumDatabase): QueueDao = db.queueDao()
+
+    @Provides
+    fun provideBehaviorProfileDao(db: LithiumDatabase): AppBehaviorProfileDao =
+        db.behaviorProfileDao()
 }

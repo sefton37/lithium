@@ -1,9 +1,11 @@
 package ai.talkingrock.lithium.ai
 
+import ai.talkingrock.lithium.data.model.AppBehaviorProfile
 import ai.talkingrock.lithium.data.model.NotificationRecord
 import android.util.Log
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.math.min
 
 /**
  * Classifies a [NotificationRecord] into one of the six [NotificationCategory] labels.
@@ -32,21 +34,103 @@ class NotificationClassifier @Inject constructor(
      *
      * Never throws. Returns [NotificationCategory.UNKNOWN] with 0.0 confidence on failure.
      */
-    fun classify(record: NotificationRecord): ClassificationResult {
+    fun classify(record: NotificationRecord): ClassificationResult =
+        classify(record, profile = null)
+
+    /**
+     * Profile-aware classification. The [profile] provides lifetime behavioral data
+     * that can adjust the base classification's confidence or override its category.
+     */
+    fun classify(record: NotificationRecord, profile: AppBehaviorProfile?): ClassificationResult {
         val prompt = buildPrompt(record)
 
         // Tier 1: ONNX model (no-op until model is downloaded and inference is wired)
         val modelResult = aiEngine.classify(prompt)
         if (modelResult != null) {
             Log.d(TAG, "classify: ONNX result ${modelResult.label} (${modelResult.confidence}) for pkg=${record.packageName}")
-            return modelResult
+            return applyBehavioralAdjustment(modelResult, profile)
         }
 
         // Tier 2: heuristic fallback
         val heuristicResult = classifyHeuristic(record)
         Log.d(TAG, "classify: heuristic result ${heuristicResult.label} (${heuristicResult.confidence}) for pkg=${record.packageName}")
-        return heuristicResult
+        return applyBehavioralAdjustment(heuristicResult, profile)
     }
+
+    // -----------------------------------------------------------------------------------------
+    // Behavioral adjustment
+    // -----------------------------------------------------------------------------------------
+
+    /**
+     * Adjusts a base classification result using lifetime behavioral data.
+     *
+     * Rules (in priority order):
+     * A. User override — absolute priority.
+     * B. Category lock — strong behavioral evidence overrides the base classification.
+     * C. Tap-rate boost — high engagement on personal/social content boosts confidence.
+     * D. Dismiss-rate penalty — consistently dismissed "personal" content gets penalised.
+     */
+    private fun applyBehavioralAdjustment(
+        baseResult: ClassificationResult,
+        profile: AppBehaviorProfile?
+    ): ClassificationResult {
+        if (profile == null) return baseResult
+        if (profile.totalVotes < MINIMUM_VOTE_THRESHOLD) return baseResult
+
+        // Rule A: User override — absolute priority
+        profile.userReclassified?.let { userLabel ->
+            val userCat = NotificationCategory.fromLabel(userLabel)
+            if (userCat != NotificationCategory.UNKNOWN) {
+                return ClassificationResult(label = userCat.label, confidence = 0.99f)
+            }
+        }
+
+        // Rule B: Category lock — strong behavioral evidence
+        val dominantCat = NotificationCategory.fromLabel(profile.dominantCategory)
+        if (dominantCat != NotificationCategory.UNKNOWN) {
+            val topVotes = maxVoteCount(profile)
+            val voteShare = topVotes.toFloat() / profile.totalVotes
+
+            if (voteShare > CATEGORY_LOCK_PERCENT && profile.totalVotes >= CATEGORY_LOCK_THRESHOLD) {
+                if (baseResult.label != dominantCat.label) {
+                    // Strong evidence: override the base classification
+                    if (profile.totalVotes >= STRONG_EVIDENCE_THRESHOLD) {
+                        Log.d(TAG, "behavioral: overriding ${baseResult.label} → ${dominantCat.label} " +
+                                "(${profile.totalVotes} votes, ${(voteShare * 100).toInt()}% share)")
+                        return ClassificationResult(label = dominantCat.label, confidence = 0.90f)
+                    }
+                    // Moderate evidence: lower confidence on the base classification
+                    return baseResult.copy(confidence = baseResult.confidence - 0.15f)
+                }
+                // Agreement: boost confidence
+                return baseResult.copy(confidence = min(baseResult.confidence + 0.10f, 0.99f))
+            }
+        }
+
+        // Rule C: Tap-rate boost for consistently-tapped personal/social content
+        if (profile.lifetimeTapRate > TAP_BOOST_THRESHOLD &&
+            baseResult.label in setOf(NotificationCategory.PERSONAL.label, NotificationCategory.SOCIAL_SIGNAL.label)) {
+            return baseResult.copy(confidence = min(baseResult.confidence + 0.10f, 0.99f))
+        }
+
+        // Rule D: Dismiss-rate penalty for consistently-dismissed "personal" content
+        if (profile.lifetimeDismissRate > DISMISS_PENALTY_THRESHOLD &&
+            baseResult.label == NotificationCategory.PERSONAL.label) {
+            return baseResult.copy(confidence = baseResult.confidence - 0.20f)
+        }
+
+        return baseResult
+    }
+
+    /** Returns the highest vote count across all category vote columns. */
+    private fun maxVoteCount(profile: AppBehaviorProfile): Int = maxOf(
+        profile.categoryVotePersonal,
+        profile.categoryVoteEngagementBait,
+        profile.categoryVotePromotional,
+        profile.categoryVoteTransactional,
+        profile.categoryVoteSystem,
+        profile.categoryVoteSocialSignal
+    )
 
     /**
      * Builds the input string for the ONNX model from notification metadata.
@@ -165,6 +249,26 @@ class NotificationClassifier @Inject constructor(
 
     companion object {
         private const val TAG = "NotificationClassifier"
+
+        // ── Behavioral adjustment thresholds ─────────────────────────────────
+
+        /** Minimum total classification votes before behavioral adjustment applies. */
+        private const val MINIMUM_VOTE_THRESHOLD = 10
+
+        /** Vote share threshold for category lock (60%). */
+        private const val CATEGORY_LOCK_PERCENT = 0.60f
+
+        /** Minimum votes for category lock to be considered. */
+        private const val CATEGORY_LOCK_THRESHOLD = 20
+
+        /** Minimum votes for a strong-evidence override of the base classification. */
+        private const val STRONG_EVIDENCE_THRESHOLD = 50
+
+        /** Lifetime tap rate above which personal/social confidence gets boosted. */
+        private const val TAP_BOOST_THRESHOLD = 0.30f
+
+        /** Lifetime dismiss rate above which "personal" classification gets penalised. */
+        private const val DISMISS_PENALTY_THRESHOLD = 0.70f
 
         private val KNOWN_SYSTEM_PACKAGES = setOf(
             "android",

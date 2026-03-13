@@ -2,6 +2,7 @@ package ai.talkingrock.lithium.data.db
 
 import androidx.room.Database
 import androidx.room.RoomDatabase
+import ai.talkingrock.lithium.data.model.AppBehaviorProfile
 import ai.talkingrock.lithium.data.model.NotificationRecord
 import ai.talkingrock.lithium.data.model.SessionRecord
 import ai.talkingrock.lithium.data.model.Rule
@@ -27,6 +28,7 @@ import ai.talkingrock.lithium.data.model.QueuedNotification
  * - 1: Phase 0 scaffold — all 6 tables created.
  * - 2: M2 Correlate — added `is_from_contact` to notifications;
  *      added `package_name` and `duration_ms` to sessions.
+ * - 3: Behavioral learning — added `app_behavior_profiles` table.
  */
 @Database(
     entities = [
@@ -35,9 +37,10 @@ import ai.talkingrock.lithium.data.model.QueuedNotification
         Rule::class,
         Report::class,
         Suggestion::class,
-        QueuedNotification::class
+        QueuedNotification::class,
+        AppBehaviorProfile::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = true
 )
 abstract class LithiumDatabase : RoomDatabase() {
@@ -47,4 +50,5 @@ abstract class LithiumDatabase : RoomDatabase() {
     abstract fun reportDao(): ReportDao
     abstract fun suggestionDao(): SuggestionDao
     abstract fun queueDao(): QueueDao
+    abstract fun behaviorProfileDao(): AppBehaviorProfileDao
 }

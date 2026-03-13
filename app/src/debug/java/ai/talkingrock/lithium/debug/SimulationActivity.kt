@@ -10,6 +10,7 @@ import ai.talkingrock.lithium.ai.NotificationClassifier
 import ai.talkingrock.lithium.ai.PatternAnalyzer
 import ai.talkingrock.lithium.ai.ReportGenerator
 import ai.talkingrock.lithium.ai.SuggestionGenerator
+import ai.talkingrock.lithium.data.db.AppBehaviorProfileDao
 import ai.talkingrock.lithium.data.db.NotificationDao
 import ai.talkingrock.lithium.data.db.QueueDao
 import ai.talkingrock.lithium.data.db.ReportDao
@@ -42,6 +43,7 @@ class SimulationActivity : ComponentActivity() {
     @Inject lateinit var reportDao: ReportDao
     @Inject lateinit var suggestionDao: SuggestionDao
     @Inject lateinit var queueDao: QueueDao
+    @Inject lateinit var behaviorProfileDao: AppBehaviorProfileDao
     @Inject lateinit var classifier: NotificationClassifier
     @Inject lateinit var patternAnalyzer: PatternAnalyzer
     @Inject lateinit var reportGenerator: ReportGenerator
@@ -70,6 +72,7 @@ class SimulationActivity : ComponentActivity() {
         lifecycleScope.launch {
             val runner = SimulationRunner(
                 notificationDao, sessionDao, reportDao, suggestionDao, queueDao,
+                behaviorProfileDao,
                 classifier, patternAnalyzer, reportGenerator, suggestionGenerator,
                 reportRepository
             )

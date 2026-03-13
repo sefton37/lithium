@@ -6,6 +6,7 @@ import ai.talkingrock.lithium.ai.NotificationClassifier
 import ai.talkingrock.lithium.ai.PatternAnalyzer
 import ai.talkingrock.lithium.ai.ReportGenerator
 import ai.talkingrock.lithium.ai.SuggestionGenerator
+import ai.talkingrock.lithium.data.db.AppBehaviorProfileDao
 import ai.talkingrock.lithium.data.db.NotificationDao
 import ai.talkingrock.lithium.data.db.QueueDao
 import ai.talkingrock.lithium.data.db.ReportDao
@@ -33,6 +34,7 @@ class SimulationRunner(
     private val reportDao: ReportDao,
     private val suggestionDao: SuggestionDao,
     private val queueDao: QueueDao,
+    private val behaviorProfileDao: AppBehaviorProfileDao,
     private val classifier: NotificationClassifier,
     private val patternAnalyzer: PatternAnalyzer,
     private val reportGenerator: ReportGenerator,
@@ -69,6 +71,7 @@ class SimulationRunner(
         reportDao.deleteAll()
         suggestionDao.deleteAll()
         queueDao.deleteAll()
+        behaviorProfileDao.deleteAll()
 
         // Step 1: Generate and insert synthetic data
         val (notifications, sessions) = getProfileData(profileNumber)

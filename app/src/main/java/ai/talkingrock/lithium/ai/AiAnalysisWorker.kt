@@ -8,6 +8,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import ai.talkingrock.lithium.data.db.NotificationDao
 import ai.talkingrock.lithium.data.db.SessionDao
+import ai.talkingrock.lithium.data.repository.BehaviorProfileRepository
 import ai.talkingrock.lithium.data.repository.ReportRepository
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
@@ -26,11 +27,14 @@ import dagger.assisted.AssistedInject
  * See [ai.talkingrock.lithium.LithiumApp] and [ai.talkingrock.lithium.service.BootReceiver]
  * for scheduling and re-scheduling logic.
  *
- * Worker logic (M4):
- * 1. Classify up to [MAX_BATCH_SIZE] unclassified records (same as M3).
- * 2. Run [PatternAnalyzer] to aggregate stats over the past 24 hours.
- * 3. Run [ReportGenerator] to produce a plain-language report and insert it via [ReportRepository].
- * 4. Run [SuggestionGenerator] to produce rule suggestions and insert them linked to the new report.
+ * Worker logic:
+ * 1. Load behavioral profiles for profile-aware classification.
+ * 2. Classify up to [MAX_BATCH_SIZE] unclassified records.
+ * 3. Run [PatternAnalyzer] to aggregate stats over the past 24 hours.
+ * 4. Run [ReportGenerator] to produce a plain-language report.
+ * 5. Run [SuggestionGenerator] to produce rule suggestions (with blended tap rate).
+ * 6. Data retention cleanup.
+ * 7. Accumulate behavioral profiles from this cycle's data.
  */
 @HiltWorker
 class AiAnalysisWorker @AssistedInject constructor(
@@ -43,6 +47,7 @@ class AiAnalysisWorker @AssistedInject constructor(
     private val reportGenerator: ReportGenerator,
     private val suggestionGenerator: SuggestionGenerator,
     private val reportRepository: ReportRepository,
+    private val behaviorProfileRepository: BehaviorProfileRepository,
     private val sharedPreferences: SharedPreferences
 ) : CoroutineWorker(appContext, workerParams) {
 
@@ -50,7 +55,18 @@ class AiAnalysisWorker @AssistedInject constructor(
         Log.d(TAG, "doWork: starting analysis pass")
 
         // ---------------------------------------------------------------------------------
-        // Step 1: Classify unclassified notifications
+        // Step 1: Load behavioral profiles for profile-aware classification
+        // ---------------------------------------------------------------------------------
+        val profiles = try {
+            behaviorProfileRepository.getProfileMap()
+        } catch (e: Exception) {
+            Log.e(TAG, "doWork: failed to load behavioral profiles, proceeding without", e)
+            emptyMap()
+        }
+        Log.d(TAG, "doWork: loaded ${profiles.size} behavioral profile(s)")
+
+        // ---------------------------------------------------------------------------------
+        // Step 2: Classify unclassified notifications
         // ---------------------------------------------------------------------------------
         val unclassified = try {
             notificationDao.getUnclassified(limit = MAX_BATCH_SIZE)
@@ -66,7 +82,9 @@ class AiAnalysisWorker @AssistedInject constructor(
 
             for (record in unclassified) {
                 try {
-                    val result = classifier.classify(record)
+                    val profileKey = Pair(record.packageName, record.channelId ?: "")
+                    val profile = profiles[profileKey]
+                    val result = classifier.classify(record, profile)
                     notificationDao.updateClassification(
                         id = record.id,
                         classification = result.label,
@@ -84,7 +102,7 @@ class AiAnalysisWorker @AssistedInject constructor(
         }
 
         // ---------------------------------------------------------------------------------
-        // Step 2: Aggregate patterns for the past 24 hours
+        // Step 3: Aggregate patterns for the past 24 hours
         // ---------------------------------------------------------------------------------
         val since = System.currentTimeMillis() - ANALYSIS_WINDOW_MS
         Log.d(TAG, "doWork: aggregating patterns since=$since")
@@ -103,7 +121,7 @@ class AiAnalysisWorker @AssistedInject constructor(
         Log.d(TAG, "doWork: found $totalInWindow notifications in window")
 
         // ---------------------------------------------------------------------------------
-        // Step 3: Generate and persist the report
+        // Step 4: Generate and persist the report
         // ---------------------------------------------------------------------------------
         val report = reportGenerator.generate(
             byCategory = byCategory,
@@ -119,13 +137,14 @@ class AiAnalysisWorker @AssistedInject constructor(
         Log.d(TAG, "doWork: inserted report id=$reportId")
 
         // ---------------------------------------------------------------------------------
-        // Step 4: Generate and persist suggestions linked to the new report
+        // Step 5: Generate and persist suggestions linked to the new report
         // ---------------------------------------------------------------------------------
         val allNotifications = byCategory.values.flatten()
         val rawSuggestions = suggestionGenerator.generate(
             byCategory = byCategory,
             appStats = appStats,
-            notifications = allNotifications
+            notifications = allNotifications,
+            profiles = profiles
         )
         // Attach the report ID to each suggestion before insertion.
         val linkedSuggestions = rawSuggestions.map { it.copy(reportId = reportId) }
@@ -143,7 +162,7 @@ class AiAnalysisWorker @AssistedInject constructor(
         }
 
         // ---------------------------------------------------------------------------------
-        // Step 5: Data retention cleanup — delete records older than configured retention
+        // Step 6: Data retention cleanup — delete records older than configured retention
         // ---------------------------------------------------------------------------------
         val retentionDays = sharedPreferences.getInt(PREF_RETENTION_DAYS, DEFAULT_RETENTION_DAYS)
         val retentionMs = retentionDays * 24L * 60L * 60L * 1000L
@@ -155,6 +174,34 @@ class AiAnalysisWorker @AssistedInject constructor(
         } catch (e: Exception) {
             Log.e(TAG, "doWork: retention cleanup failed", e)
             // Non-fatal: cleanup will retry on the next worker run.
+        }
+
+        // ---------------------------------------------------------------------------------
+        // Step 7: Accumulate behavioral profiles from this cycle's data
+        // ---------------------------------------------------------------------------------
+        val nowMs = System.currentTimeMillis()
+        try {
+            // Record engagement stats for each classified notification in this window
+            val allClassified = byCategory.values.flatten()
+            Log.d(TAG, "doWork: accumulating profiles for ${allClassified.size} notification(s)")
+            for (record in allClassified) {
+                val label = record.aiClassification ?: NotificationCategory.UNKNOWN.label
+                behaviorProfileRepository.recordNotification(record, label, nowMs)
+            }
+
+            // Record session stats per package
+            val sessions = sessionDao.getSessionsSince(since)
+            val sessionsByPackage = sessions.groupBy { it.packageName }
+            for ((pkg, pkgSessions) in sessionsByPackage) {
+                if (pkg.isBlank()) continue
+                val totalDuration = pkgSessions.sumOf { it.durationMs ?: 0L }
+                behaviorProfileRepository.recordSessions(pkg, pkgSessions.size, totalDuration, nowMs)
+            }
+            Log.d(TAG, "doWork: profile accumulation complete — " +
+                    "${allClassified.size} notifications, ${sessions.size} sessions")
+        } catch (e: Exception) {
+            Log.e(TAG, "doWork: profile accumulation failed", e)
+            // Non-fatal: profiles will catch up on next run.
         }
 
         Log.d(TAG, "doWork: analysis pass complete")
