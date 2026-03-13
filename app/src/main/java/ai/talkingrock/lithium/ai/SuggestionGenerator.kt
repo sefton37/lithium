@@ -105,6 +105,20 @@ class SuggestionGenerator @Inject constructor() {
                         )
                     )
                 }
+
+                // Moderate promotional volume with low engagement → queue
+                category == NotificationCategory.PROMOTIONAL &&
+                stats.totalCount >= MIN_NOTIFICATIONS_TO_SUGGEST &&
+                tapRate < QUEUE_TAP_RATE_THRESHOLD -> {
+                    suggestions.add(
+                        buildQueueSuggestion(
+                            stats,
+                            "${friendlyName(stats.packageName)} sent ${stats.totalCount} promotional " +
+                            "notifications and you only opened ${stats.tappedCount}. Queuing them " +
+                            "keeps deals available without the constant pings."
+                        )
+                    )
+                }
             }
         }
 
@@ -172,37 +186,9 @@ class SuggestionGenerator @Inject constructor() {
         .filter { it.packageName == packageName }
         .none { it.isFromContact }
 
-    /** Derives a short human-readable app name from a package name (same logic as ReportGenerator). */
-    private fun friendlyName(packageName: String): String {
-        val KNOWN_NAMES = mapOf(
-            "com.instagram.android"              to "Instagram",
-            "com.facebook.katana"                to "Facebook",
-            "com.twitter.android"                to "Twitter / X",
-            "com.zhiliaoapp.musically"           to "TikTok",
-            "com.snapchat.android"               to "Snapchat",
-            "com.reddit.frontpage"               to "Reddit",
-            "com.linkedin.android"               to "LinkedIn",
-            "com.google.android.youtube"         to "YouTube",
-            "com.whatsapp"                       to "WhatsApp",
-            "org.telegram.messenger"             to "Telegram",
-            "com.discord"                        to "Discord",
-            "com.slack"                          to "Slack",
-            "com.microsoft.teams"                to "Microsoft Teams",
-            "com.google.android.gm"              to "Gmail",
-            "com.microsoft.office.outlook"       to "Outlook",
-            "org.thoughtcrime.securesms"         to "Signal",
-            "com.pinterest"                      to "Pinterest",
-            "com.tumblr"                         to "Tumblr"
-        )
-        KNOWN_NAMES[packageName]?.let { return it }
-        val last = packageName.substringAfterLast('.')
-        return last
-            .replace(Regex("[^A-Za-z0-9]"), " ")
-            .split(" ")
-            .filter { it.isNotBlank() }
-            .joinToString(" ") { it.replaceFirstChar { c -> c.uppercaseChar() } }
-            .ifBlank { packageName }
-    }
+    /** Delegates to shared [AppNames.friendlyName]. */
+    private fun friendlyName(packageName: String): String =
+        AppNames.friendlyName(packageName)
 
     companion object {
         /** Minimum total notifications from an app to consider generating a suggestion. */

@@ -123,10 +123,10 @@ class ReportGenerator @Inject constructor() {
     private fun buildRatioSentence(contactCount: Int, algoCount: Int): String {
         return when {
             contactCount == 0 && algoCount == 0 -> ""
-            contactCount == 0 ->
-                "None of these came from people in your contacts — they were all algorithmic."
-            algoCount == 0 ->
-                "Every notification came from someone you know. That's a good sign."
+            contactCount == 0 && algoCount > 0 ->
+                "None of these came from people in your contacts — $algoCount were algorithmic."
+            algoCount == 0 && contactCount > 0 ->
+                "$contactCount came from people in your contacts and none were algorithmically generated."
             contactCount > algoCount ->
                 "More of these were from real people ($contactCount) than algorithmic content ($algoCount)."
             algoCount > contactCount * 3 ->
@@ -219,44 +219,9 @@ class ReportGenerator @Inject constructor() {
         NotificationCategory.UNKNOWN         -> "uncategorised"
     }
 
-    /**
-     * Derives a short, readable app name from an Android package name.
-     * Best-effort: extracts the last segment and capitalises it.
-     * e.g. "com.instagram.android" → "Instagram"
-     */
-    internal fun friendlyName(packageName: String): String {
-        val KNOWN_NAMES = mapOf(
-            "com.instagram.android"              to "Instagram",
-            "com.facebook.katana"                to "Facebook",
-            "com.twitter.android"                to "Twitter / X",
-            "com.zhiliaoapp.musically"           to "TikTok",
-            "com.snapchat.android"               to "Snapchat",
-            "com.reddit.frontpage"               to "Reddit",
-            "com.linkedin.android"               to "LinkedIn",
-            "com.google.android.youtube"         to "YouTube",
-            "com.whatsapp"                       to "WhatsApp",
-            "org.telegram.messenger"             to "Telegram",
-            "com.discord"                        to "Discord",
-            "com.slack"                          to "Slack",
-            "com.microsoft.teams"                to "Microsoft Teams",
-            "com.google.android.gm"              to "Gmail",
-            "com.microsoft.office.outlook"       to "Outlook",
-            "org.thoughtcrime.securesms"         to "Signal",
-            "com.pinterest"                      to "Pinterest",
-            "com.tumblr"                         to "Tumblr"
-        )
-        KNOWN_NAMES[packageName]?.let { return it }
-
-        // Strip leading segments: "com.example.myapp" → "myapp"
-        val last = packageName.substringAfterLast('.')
-        // Split on non-alphanumeric and capitalise each word
-        return last
-            .replace(Regex("[^A-Za-z0-9]"), " ")
-            .split(" ")
-            .filter { it.isNotBlank() }
-            .joinToString(" ") { it.replaceFirstChar { c -> c.uppercaseChar() } }
-            .ifBlank { packageName }
-    }
+    /** Delegates to shared [AppNames.friendlyName]. */
+    internal fun friendlyName(packageName: String): String =
+        AppNames.friendlyName(packageName)
 
     companion object {
         /** Minimum notification count for an app to appear in the "top apps" sentence. */

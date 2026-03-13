@@ -126,7 +126,6 @@ class NotificationClassifier @Inject constructor(
     private fun isSystemPackage(pkg: String): Boolean =
         pkg.startsWith("android") ||
         pkg.startsWith("com.android.") ||
-        pkg.startsWith("com.google.android.") ||
         pkg.startsWith("com.samsung.android.") ||
         pkg.startsWith("com.oneplus.") ||
         pkg.startsWith("com.motorola.") ||
@@ -178,6 +177,10 @@ class NotificationClassifier @Inject constructor(
             "com.google.android.packageinstaller",
             "com.android.packageinstaller",
             "com.google.android.deskclock",
+            "com.google.android.dialer",
+            "com.google.android.calendar",
+            "com.google.android.apps.wellbeing",
+            "com.google.android.apps.nexuslauncher",
             "com.android.providers.downloads",
             "com.android.bluetooth",
             "com.android.nfc",
@@ -193,8 +196,9 @@ class NotificationClassifier @Inject constructor(
 
         private val KNOWN_ECOMMERCE_PACKAGES = listOf(
             "amazon", "ebay", "etsy", "shopify", "walmart",
-            "target.app", "bestbuy", "wayfair", "wish.app",
-            "aliexpress", "shein", "temu"
+            "com.target", "bestbuy", "wayfair", "wish",
+            "aliexpress", "shein", "temu", "zzkko",
+            "ubercab.eats", "doordash", "grubhub", "instacart"
         )
 
         private val KNOWN_MESSAGING_PACKAGES = listOf(
@@ -257,7 +261,12 @@ class NotificationClassifier @Inject constructor(
             "promo code", "coupon", "free shipping", "free trial",
             "unsubscribe", "opt out", "manage preferences",
             "you're invited", "early access", "members only",
-            "black friday", "cyber monday", "sale ends"
+            "black friday", "cyber monday", "sale ends",
+            "deal of the day", "today only", "lightning deal",
+            "back in stock", "price drop", "new arrivals",
+            "buy ", "shop ", "order now", "just dropped",
+            "wish list", "wishlist", "in the cart", "in your cart",
+            "points expiring", "redeem", "claim", "grab them"
         )
     }
 }
