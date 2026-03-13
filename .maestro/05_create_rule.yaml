@@ -1,0 +1,51 @@
+# Flow: Open Add Rule form and verify it renders
+# Prerequisites: Permissions granted by wrapper script before Maestro runs
+appId: ai.talkingrock.lithium.debug
+---
+- stopApp
+- waitForAnimationToEnd
+- launchApp
+
+# Wait for app to load
+- extendedWaitUntil:
+    visible:
+      text: "No new report."
+    timeout: 15000
+
+# Navigate to Rules
+- tapOn: "Rules"
+- extendedWaitUntil:
+    visible:
+      text: "No rules yet."
+    timeout: 5000
+
+# Tap the FAB to add a rule
+- tapOn:
+    id: "Add rule"
+
+# Should see the Add Rule form
+- extendedWaitUntil:
+    visible:
+      text: "New Rule"
+    timeout: 5000
+
+# Verify form fields are present
+- assertVisible: "App"
+- assertVisible: "Action"
+- assertVisible: "Channel filter (optional)"
+- assertVisible: "Description"
+- assertVisible: "Save Rule"
+
+# Tap the App dropdown
+- tapOn: "Select an app"
+- waitForAnimationToEnd
+
+# Dismiss dropdown
+- pressKey: back
+
+# Go back to Rules
+- pressKey: back
+- extendedWaitUntil:
+    visible:
+      text: "No rules yet."
+    timeout: 5000

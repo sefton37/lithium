@@ -1,0 +1,57 @@
+# Flow: Purge all data and verify the app resets cleanly
+# Prerequisites: Permissions granted by wrapper script, some data exists
+appId: ai.talkingrock.lithium.debug
+---
+- launchApp
+
+# Wait for app ready
+- extendedWaitUntil:
+    visible:
+      text: "Briefing"
+    timeout: 15000
+
+# Navigate to Settings
+- tapOn: "Settings"
+- extendedWaitUntil:
+    visible:
+      text: "Settings"
+    timeout: 5000
+
+# Scroll to purge section
+- scrollUntilVisible:
+    element:
+      text: "Purge All Data"
+    direction: DOWN
+
+# Tap the purge button (the second "Purge All Data" — first is the header)
+- tapOn:
+    text: "Purge All Data"
+    index: 1
+
+# Confirm in dialog
+- extendedWaitUntil:
+    visible:
+      text: "Purge All Data?"
+    timeout: 3000
+- tapOn: "Purge"
+
+# Wait for purge to complete
+- waitForAnimationToEnd
+
+# Navigate to Queue — should be empty
+- tapOn: "Queue"
+- extendedWaitUntil:
+    visible:
+      text: "No queued notifications."
+    timeout: 5000
+
+# Navigate to Rules — rules should still exist (purge doesn't delete rules)
+- tapOn: "Rules"
+- waitForAnimationToEnd
+
+# Navigate to Briefing — should show no report
+- tapOn: "Briefing"
+- extendedWaitUntil:
+    visible:
+      text: "No new report."
+    timeout: 5000

@@ -125,6 +125,11 @@ object DatabaseModule {
             // Do not require user authentication — the database must open on boot
             // for the NotificationListenerService to function.
             .setUserAuthenticationRequired(false)
+            // Allow caller-provided IV. Required because we use a fixed IV for
+            // deterministic key derivation (see class-level doc). The Keystore
+            // default rejects caller IVs to prevent IV reuse in data encryption,
+            // but that concern doesn't apply to our derivation use case.
+            .setRandomizedEncryptionRequired(false)
             .build()
 
         keyGenerator.init(spec)

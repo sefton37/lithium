@@ -57,9 +57,11 @@ import dagger.hilt.android.AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        // Apply FLAG_SECURE before setContent so the window is protected
-        // from the first frame render. Do NOT move this after setContent.
-        window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        // Apply FLAG_SECURE in release builds to prevent screenshots/recording.
+        // Disabled in debug builds so Maestro and other testing tools can access the UI.
+        if (!BuildConfig.DEBUG) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        }
 
         // Edge-to-edge — Compose handles insets via WindowInsets APIs
         WindowCompat.setDecorFitsSystemWindows(window, false)

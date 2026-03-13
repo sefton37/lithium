@@ -1,0 +1,30 @@
+# Flow: Setup Screen — Verify permissions UI renders and buttons exist
+# Prerequisites: Revoke all permissions first (revoke-permissions.sh)
+appId: ai.talkingrock.lithium.debug
+---
+- clearState
+- launchApp
+
+# Setup screen should be first screen shown
+- extendedWaitUntil:
+    visible:
+      text: "Set up Lithium"
+    timeout: 10000
+
+- assertVisible: "Lithium needs a few permissions to manage your notifications."
+
+# All three permission rows should be visible
+- assertVisible: "Notification Access"
+- assertVisible: "Required. Allows Lithium to see and filter notifications."
+
+- assertVisible: "Usage Access"
+- assertVisible: "Tracks how long you use apps after tapping a notification."
+
+- scrollUntilVisible:
+    element:
+      text: "Contacts (Recommended)"
+    direction: DOWN
+- assertVisible: "Identifies notifications from people you know. Optional."
+
+# All should show Grant buttons (none granted yet)
+- assertVisible: "Grant"

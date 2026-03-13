@@ -1,0 +1,49 @@
+# Flow: Navigate all bottom tabs — verify each screen renders without crashing
+# Prerequisites: Permissions granted by wrapper script before Maestro runs
+appId: ai.talkingrock.lithium.debug
+---
+- stopApp
+- waitForAnimationToEnd
+- launchApp
+
+# Wait for briefing
+- extendedWaitUntil:
+    visible:
+      text: "No new report."
+    timeout: 15000
+
+# Navigate to Queue tab
+- tapOn: "Queue"
+- extendedWaitUntil:
+    visible:
+      text: "No queued notifications."
+    timeout: 5000
+- assertVisible: "Rules that use 'Queue' will hold notifications here for your review."
+
+# Navigate to Rules tab
+- tapOn: "Rules"
+- extendedWaitUntil:
+    visible:
+      text: "No rules yet."
+    timeout: 5000
+
+# Navigate to Settings tab
+- tapOn: "Settings"
+- extendedWaitUntil:
+    visible:
+      text: "Permissions"
+    timeout: 5000
+- assertVisible: "Data Retention"
+
+- scrollUntilVisible:
+    element:
+      text: "About"
+    direction: DOWN
+- assertVisible: "Diagnostics"
+
+# Navigate back to Briefing
+- tapOn: "Briefing"
+- extendedWaitUntil:
+    visible:
+      text: "No new report."
+    timeout: 5000
