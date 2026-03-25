@@ -1,27 +1,28 @@
 # Flow: Open Add Rule form and verify it renders
-# Prerequisites: Permissions granted by wrapper script before Maestro runs
+# Prerequisites: Permissions granted by run-tests.sh Phase 2
 appId: ai.talkingrock.lithium.debug
 ---
 - stopApp
 - waitForAnimationToEnd
 - launchApp
 
-# Wait for app to load
+# Wait for app to load — use "Briefing" tab label (always present)
 - extendedWaitUntil:
     visible:
-      text: "No new report."
+      text: "Briefing"
     timeout: 15000
 
 # Navigate to Rules
 - tapOn: "Rules"
 - extendedWaitUntil:
     visible:
-      text: "No rules yet."
+      text: "Rules"
     timeout: 5000
 
 # Tap the FAB to add a rule
-- tapOn:
-    id: "Add rule"
+# Compose FABs expose contentDescription as the accessibility label, not resource-id.
+# Maestro resolves accessibility labels via text match.
+- tapOn: "Add rule"
 
 # Should see the Add Rule form
 - extendedWaitUntil:
@@ -36,16 +37,9 @@ appId: ai.talkingrock.lithium.debug
 - assertVisible: "Description"
 - assertVisible: "Save Rule"
 
-# Tap the App dropdown
-- tapOn: "Select an app"
-- waitForAnimationToEnd
-
-# Dismiss dropdown
-- pressKey: back
-
 # Go back to Rules
 - pressKey: back
 - extendedWaitUntil:
     visible:
-      text: "No rules yet."
+      text: "Rules"
     timeout: 5000

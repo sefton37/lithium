@@ -1,0 +1,15 @@
+# Helper flow: Verify the app is ready for the main test suite.
+# After Phase 2.5 (permissions granted + onboarding completed by run-tests.sh),
+# the app routes directly to Briefing on launch — no pager navigation needed.
+# This flow simply confirms that post-onboarding state is correct.
+appId: ai.talkingrock.lithium.debug
+---
+- stopApp
+- waitForAnimationToEnd
+- launchApp
+
+# App should route to Briefing when onboarding is complete and permissions are granted.
+- extendedWaitUntil:
+    visible:
+      text: "Briefing"
+    timeout: 15000

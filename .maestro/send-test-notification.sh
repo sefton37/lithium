@@ -1,20 +1,30 @@
 #!/usr/bin/env bash
-# Send test notifications via ADB to exercise the notification listener
-# These will be captured by LithiumNotificationListener
+# Send test notifications via ADB to exercise the Lithium classifier
+# Sends a variety of notification types to trigger different categories:
+#   social, promotional, OTP/transactional, background/system, personal message
 
 echo "Sending test notifications..."
 
-# Send a basic notification
-adb shell am broadcast \
-  -a android.intent.action.MAIN \
-  --es title "Test Message" \
-  --es text "Hello from Maestro test" \
-  2>&1
+APP_ID="ai.talkingrock.lithium.debug"
 
-# Use the notification service directly to post notifications
-# This creates real notifications that the listener will capture
-adb shell cmd notification post -t "Test Notification 1" "tag1" "This is a test notification from Maestro" 2>&1
-adb shell cmd notification post -t "Test Notification 2" "tag2" "Another test notification" 2>&1
-adb shell cmd notification post -t "Test Notification 3" "tag3" "Third test notification" 2>&1
+# Social — engagement noise
+adb shell cmd notification post -t "user123 liked your photo" "social_1" "Instagram" 2>&1 || true
+adb shell cmd notification post -t "You have 5 new followers" "social_2" "Twitter" 2>&1 || true
 
-echo "Test notifications sent."
+# Promotional — marketing
+adb shell cmd notification post -t "Flash Sale! 50% off everything today only" "promo_1" "ShopApp" 2>&1 || true
+adb shell cmd notification post -t "Your exclusive offer expires tonight" "promo_2" "RetailApp" 2>&1 || true
+
+# OTP / transactional — high-signal
+adb shell cmd notification post -t "Your verification code is 482910" "otp_1" "BankApp" 2>&1 || true
+adb shell cmd notification post -t "Security alert: new sign-in to your account" "otp_2" "AuthApp" 2>&1 || true
+
+# Background / ongoing — system noise
+adb shell cmd notification post -t "Sync in progress" "bg_1" "BackupApp" 2>&1 || true
+adb shell cmd notification post -t "Uploading 3 photos" "bg_2" "PhotoApp" 2>&1 || true
+
+# Personal message — contact-like (person name in title, should score high)
+adb shell cmd notification post -t "Alice: are you free tonight?" "msg_1" "Messages" 2>&1 || true
+adb shell cmd notification post -t "Bob sent you a photo" "msg_2" "WhatsApp" 2>&1 || true
+
+echo "Test notifications sent (10 total across 5 categories)."

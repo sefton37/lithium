@@ -10,23 +10,30 @@ import kotlin.math.min
 /**
  * Classifies a [NotificationRecord] into one of the six [NotificationCategory] labels.
  *
- * Architecture: two-tier.
+ * Architecture: three-tier cascade.
  *
- * Tier 1 — ONNX model inference via [AiEngine.classify]. Used when a model file has been
- * downloaded and loaded. For the initial MVP the model integration is a stub (see AiEngine),
- * so Tier 1 always falls through to Tier 2 for now.
+ * Tier 1 — ONNX model inference via [AiEngine.classify]. Fine-tuned DistilBERT/MobileBERT
+ * for 7-class notification classification. ~10ms per notification. Used when a `.onnx` model
+ * file has been sideloaded to the device.
  *
- * Tier 2 — Deterministic heuristic classifier. Rule-based logic covering the most common
- * patterns. Produces the classification for every record in the MVP. High precision for
- * the easy cases (contacts, system apps, 2FA), lower confidence for ambiguous social content.
- * This is the real MVP classifier — ONNX can be swapped in transparently via Tier 1 when ready.
+ * Tier 2 — llama.cpp generative inference via [LlamaEngine.classify]. Few-shot prompt-based
+ * classification using a small GGUF model (SmolLM-135M or Qwen2-0.5B). ~300ms per notification.
+ * Used when a `.gguf` model has been sideloaded but no ONNX model is available.
+ *
+ * Tier 3 — Deterministic heuristic classifier. Rule-based logic covering the most common
+ * patterns. Always available as the final fallback. High precision for easy cases (contacts,
+ * system apps, 2FA), lower confidence for ambiguous social content.
+ *
+ * Tier selection happens once per worker batch, not per-notification. Consistency within a
+ * report cycle matters more than per-record optimality.
  *
  * The input prompt format (consistent with PLAN.md §M3.2):
  *   [APP: {packageName}] [CHANNEL: {channelId}] [TITLE: {title}] [TEXT: {text}]
  */
 @Singleton
 class NotificationClassifier @Inject constructor(
-    private val aiEngine: AiEngine
+    private val aiEngine: AiEngine,
+    private val llamaEngine: LlamaEngine
 ) {
 
     /**
@@ -34,24 +41,36 @@ class NotificationClassifier @Inject constructor(
      *
      * Never throws. Returns [NotificationCategory.UNKNOWN] with 0.0 confidence on failure.
      */
-    fun classify(record: NotificationRecord): ClassificationResult =
+    suspend fun classify(record: NotificationRecord): ClassificationResult =
         classify(record, profile = null)
 
     /**
      * Profile-aware classification. The [profile] provides lifetime behavioral data
      * that can adjust the base classification's confidence or override its category.
      */
-    fun classify(record: NotificationRecord, profile: AppBehaviorProfile?): ClassificationResult {
+    suspend fun classify(record: NotificationRecord, profile: AppBehaviorProfile?): ClassificationResult {
         val prompt = buildPrompt(record)
 
-        // Tier 1: ONNX model (no-op until model is downloaded and inference is wired)
-        val modelResult = aiEngine.classify(prompt)
-        if (modelResult != null) {
-            Log.d(TAG, "classify: ONNX result ${modelResult.label} (${modelResult.confidence}) for pkg=${record.packageName}")
-            return applyBehavioralAdjustment(modelResult, profile)
+        // Tier 1: ONNX model — fast (~10ms), highest quality when available
+        val onnxResult = aiEngine.classify(prompt)
+        if (onnxResult != null) {
+            Log.d(TAG, "classify: ONNX result ${onnxResult.label} (${onnxResult.confidence}) for pkg=${record.packageName}")
+            return applyBehavioralAdjustment(onnxResult, profile)
         }
 
-        // Tier 2: heuristic fallback
+        // Tier 2: llama.cpp — slower (~300ms), few-shot generative classification
+        val llamaResult = llamaEngine.classify(
+            packageName = record.packageName,
+            channelId = record.channelId,
+            title = record.title,
+            text = record.text
+        )
+        if (llamaResult != null) {
+            Log.d(TAG, "classify: llama.cpp result ${llamaResult.label} (${llamaResult.confidence}) for pkg=${record.packageName}")
+            return applyBehavioralAdjustment(llamaResult, profile)
+        }
+
+        // Tier 3: heuristic fallback — always available
         val heuristicResult = classifyHeuristic(record)
         Log.d(TAG, "classify: heuristic result ${heuristicResult.label} (${heuristicResult.confidence}) for pkg=${record.packageName}")
         return applyBehavioralAdjustment(heuristicResult, profile)
@@ -100,7 +119,7 @@ class NotificationClassifier @Inject constructor(
                         return ClassificationResult(label = dominantCat.label, confidence = 0.90f)
                     }
                     // Moderate evidence: lower confidence on the base classification
-                    return baseResult.copy(confidence = baseResult.confidence - 0.15f)
+                    return baseResult.copy(confidence = maxOf(0.0f, baseResult.confidence - 0.15f))
                 }
                 // Agreement: boost confidence
                 return baseResult.copy(confidence = min(baseResult.confidence + 0.10f, 0.99f))
@@ -116,7 +135,7 @@ class NotificationClassifier @Inject constructor(
         // Rule D: Dismiss-rate penalty for consistently-dismissed "personal" content
         if (profile.lifetimeDismissRate > DISMISS_PENALTY_THRESHOLD &&
             baseResult.label == NotificationCategory.PERSONAL.label) {
-            return baseResult.copy(confidence = baseResult.confidence - 0.20f)
+            return baseResult.copy(confidence = maxOf(0.0f, baseResult.confidence - 0.20f))
         }
 
         return baseResult
@@ -154,6 +173,13 @@ class NotificationClassifier @Inject constructor(
         val text = record.text?.lowercase() ?: ""
         val channel = record.channelId?.lowercase() ?: ""
         val combined = "$title $text"
+
+        // Rule 0: Ongoing/persistent notifications are background — not user-facing alerts.
+        // This is the highest-priority rule: media controls, navigation, weather widgets, etc.
+        // are definitionally non-interruptive regardless of sender.
+        if (record.isOngoing || isBackgroundPackage(pkg)) {
+            return result(NotificationCategory.BACKGROUND, 0.95f)
+        }
 
         // Rule 1: Known contact → personal (highest priority)
         if (record.isFromContact) {
@@ -206,6 +232,9 @@ class NotificationClassifier @Inject constructor(
     // -----------------------------------------------------------------------------------------
     // Pattern helpers
     // -----------------------------------------------------------------------------------------
+
+    private fun isBackgroundPackage(pkg: String): Boolean =
+        KNOWN_BACKGROUND_PACKAGES.any { pkg == it }
 
     private fun isSystemPackage(pkg: String): Boolean =
         pkg.startsWith("android") ||
@@ -269,6 +298,19 @@ class NotificationClassifier @Inject constructor(
 
         /** Lifetime dismiss rate above which "personal" classification gets penalised. */
         private const val DISMISS_PENALTY_THRESHOLD = 0.70f
+
+        /**
+         * Packages that always produce background/ongoing notifications even when
+         * [NotificationRecord.isOngoing] is not set. Media players, navigation, and
+         * companion apps update their persistent notifications at very high frequency
+         * but never require user attention.
+         */
+        private val KNOWN_BACKGROUND_PACKAGES = setOf(
+            "com.spotify.music",                                    // media playback controls
+            "com.google.android.apps.maps",                         // navigation
+            "com.google.android.projection.gearhead",               // Android Auto
+            "com.google.android.apps.wearables.maestro.companion"   // Pixel Watch companion
+        )
 
         private val KNOWN_SYSTEM_PACKAGES = setOf(
             "android",

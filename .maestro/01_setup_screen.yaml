@@ -1,30 +1,17 @@
-# Flow: Setup Screen — Verify permissions UI renders and buttons exist
-# Prerequisites: Revoke all permissions first (revoke-permissions.sh)
+# Flow: Setup Screen — verify onboarding pager renders on fresh/revoked state
+# Prerequisites: Notification listener revoked by run-tests.sh Phase 1
+# NOTE: Do NOT use clearState — it breaks EncryptedSharedPreferences/SQLCipher
 appId: ai.talkingrock.lithium.debug
 ---
-- clearState
+- stopApp
+- waitForAnimationToEnd
 - launchApp
 
-# Setup screen should be first screen shown
+# App should show setup pager. It may start at page 0 (title) or page 3
+# (notification access) depending on whether onboarding was previously completed.
+# A returning user whose listener was revoked lands on page 3, not page 0.
+# Accept either: title page OR notification access page.
 - extendedWaitUntil:
     visible:
-      text: "Set up Lithium"
-    timeout: 10000
-
-- assertVisible: "Lithium needs a few permissions to manage your notifications."
-
-# All three permission rows should be visible
-- assertVisible: "Notification Access"
-- assertVisible: "Required. Allows Lithium to see and filter notifications."
-
-- assertVisible: "Usage Access"
-- assertVisible: "Tracks how long you use apps after tapping a notification."
-
-- scrollUntilVisible:
-    element:
-      text: "Contacts (Recommended)"
-    direction: DOWN
-- assertVisible: "Identifies notifications from people you know. Optional."
-
-# All should show Grant buttons (none granted yet)
-- assertVisible: "Grant"
+      text: "Notification Access"
+    timeout: 15000

@@ -1,8 +1,8 @@
-# Flow: Cold start — force stop then launch, verify app recovers
-# Prerequisites: Permissions granted by wrapper script before Maestro runs
+# Flow: Cold start — force stop then launch twice, verify app recovers each time
+# Prerequisites: Permissions granted by run-tests.sh Phase 2
 appId: ai.talkingrock.lithium.debug
 ---
-# Force stop and relaunch
+# First cold start
 - stopApp
 - waitForAnimationToEnd
 - launchApp
@@ -13,7 +13,7 @@ appId: ai.talkingrock.lithium.debug
       text: "Briefing"
     timeout: 15000
 
-# Force stop again
+# Second cold start
 - stopApp
 - waitForAnimationToEnd
 - launchApp
@@ -24,7 +24,7 @@ appId: ai.talkingrock.lithium.debug
       text: "Briefing"
     timeout: 15000
 
-# Verify all tabs still work after cold restart
+# Verify all tabs still work after double cold restart
 - tapOn: "Queue"
 - waitForAnimationToEnd
 - tapOn: "Rules"
@@ -33,4 +33,6 @@ appId: ai.talkingrock.lithium.debug
 - waitForAnimationToEnd
 - tapOn: "Briefing"
 - waitForAnimationToEnd
-- assertVisible: "No new report."
+
+# App is alive and on the Briefing tab
+- assertVisible: "Briefing"

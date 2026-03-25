@@ -52,7 +52,7 @@ fun BriefingScreen(
 
     when {
         uiState.isLoading -> LoadingState()
-        uiState.report == null -> EmptyState()
+        uiState.report == null -> EmptyState(dataReady = uiState.dataReady)
         else -> ReportContent(uiState = uiState, viewModel = viewModel)
     }
 }
@@ -72,7 +72,7 @@ private fun LoadingState() {
 }
 
 @Composable
-private fun EmptyState() {
+private fun EmptyState(dataReady: Boolean) {
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -83,16 +83,37 @@ private fun EmptyState() {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text(
-                text = "No new report.",
-                style = MaterialTheme.typography.headlineSmall,
-                color = MaterialTheme.colorScheme.onBackground
-            )
-            Text(
-                text = "Your next briefing will appear after the nightly analysis runs — usually when your phone is charging overnight.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            if (dataReady) {
+                // Data threshold met — just no new report this cycle
+                Text(
+                    text = "No new report.",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+                Text(
+                    text = "Your next briefing will appear after the nightly analysis " +
+                            "runs — usually when your phone is charging overnight.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                // Still collecting data — learning in progress
+                Text(
+                    text = "Lithium is learning",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+                Text(
+                    text = "Lithium is quietly watching your notifications and learning " +
+                            "your patterns. This usually takes a few days.\n\n" +
+                            "All your notifications will arrive normally during this time " +
+                            "— nothing is being filtered yet.\n\n" +
+                            "You'll get a notification when Lithium has collected enough " +
+                            "data to produce your first briefing.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }

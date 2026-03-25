@@ -81,7 +81,12 @@ class PatternAnalyzer @Inject constructor(
      * [NotificationCategory.SOCIAL_SIGNAL].
      */
     suspend fun getContactVsAlgorithmicRatio(since: Long): Pair<Int, Int> {
-        val all = notificationDao.getAllSince(since)
+        // Exclude BACKGROUND notifications: ongoing media/navigation updates are neither
+        // "contact" nor "algorithmic" in any meaningful sense — counting them skews the ratio.
+        val all = notificationDao.getAllSince(since).filter { record ->
+            val cat = record.aiClassification?.let { NotificationCategory.fromLabel(it) }
+            cat != NotificationCategory.BACKGROUND
+        }
         val contactCount = all.count { it.isFromContact }
         val algorithmicCount = all.count { record ->
             val cat = record.aiClassification?.let { NotificationCategory.fromLabel(it) }

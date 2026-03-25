@@ -22,8 +22,10 @@ class BootReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Intent.ACTION_BOOT_COMPLETED) return
-        Log.d(TAG, "Boot completed — listener will reconnect automatically; re-enqueuing AI analysis job")
-        WorkScheduler.scheduleAiAnalysis(WorkManager.getInstance(context))
+        Log.d(TAG, "Boot completed — listener will reconnect automatically; re-enqueuing workers")
+        val workManager = WorkManager.getInstance(context)
+        WorkScheduler.scheduleAiAnalysis(workManager)
+        WorkScheduler.scheduleHealthCheck(workManager)
     }
 
     companion object {

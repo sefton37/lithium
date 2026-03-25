@@ -21,6 +21,9 @@
 # ONNX Runtime
 -keep class ai.onnxruntime.** { *; }
 
+# llama.cpp JNI bridge — native method declarations must survive proguard
+-keep class ai.talkingrock.lithium.ai.LlamaCpp { *; }
+
 # Kotlin serialization
 -keepattributes *Annotation*, InnerClasses
 -dontnote kotlinx.serialization.AnnotationsKt

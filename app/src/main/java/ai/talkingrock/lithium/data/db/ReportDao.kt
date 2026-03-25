@@ -22,6 +22,10 @@ interface ReportDao {
     @Query("UPDATE reports SET reviewed = 1 WHERE id = :id")
     suspend fun markReviewed(id: Long)
 
+    /** Mark all unreviewed reports as reviewed. Called before inserting a new report. */
+    @Query("UPDATE reports SET reviewed = 1 WHERE reviewed = 0")
+    suspend fun markAllReviewed()
+
     /** Delete all report records. Used by purge-all-data. */
     @Query("DELETE FROM reports")
     suspend fun deleteAll()

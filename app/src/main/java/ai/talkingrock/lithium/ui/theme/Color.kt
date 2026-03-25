@@ -2,30 +2,34 @@ package ai.talkingrock.lithium.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Lithium color palette — monochrome with a single accent.
-// Design principle: neutral dark backgrounds, high-contrast text,
-// a single accent for interactive elements. No decorative color.
+// Lithium color palette — warm dark theme with a single accent.
+// Adapted from Helm's design language (Talking Rock ecosystem consistency).
+// Design principle: warm charcoal backgrounds, high-contrast warm text,
+// a single sandy-brown accent for interactive elements. No decorative color.
 // Dynamic color is disabled (see Theme.kt).
 
-// Dark theme surfaces
-val DarkBackground    = Color(0xFF0D0D0D)
-val DarkSurface       = Color(0xFF1A1A1A)
-val DarkSurfaceVariant = Color(0xFF242424)
+// Dark theme surfaces — warm charcoal base
+val DarkBackground    = Color(0xFF111110)
+val DarkSurface       = Color(0xFF1C1C1A)
+val DarkSurfaceVariant = Color(0xFF252523)
 
-// On-surface text
-val OnDark            = Color(0xFFE8E8E8)
-val OnDarkMuted       = Color(0xFF9E9E9E)
+// On-surface text — warm off-white
+val OnDark            = Color(0xFFE8E4DE)
+val OnDarkMuted       = Color(0xFF8A8680)
 
-// Single accent — cool blue-grey, readable on dark surfaces
-val AccentPrimary     = Color(0xFF7EAFC4)
-val AccentSecondary   = Color(0xFF4E7A8A)
-val OnAccent          = Color(0xFF0D1E24)
+// Single accent — warm sandy brown, readable on dark surfaces
+val AccentPrimary     = Color(0xFFC4956A)
+val AccentSecondary   = Color(0xFF9E7855)
+val OnAccent          = Color(0xFF111110)
 
 // Error / destructive
-val ErrorRed          = Color(0xFFCF6679)
+val ErrorRed          = Color(0xFFC45C5C)
 val OnError           = Color(0xFF1F0007)
+
+// Status colors
+val StatusGreen       = Color(0xFF6A9A6E)
 
 // Light theme (for completeness — Lithium defaults to dark)
 val LightBackground   = Color(0xFFF4F4F4)
 val LightSurface      = Color(0xFFFFFFFF)
-val OnLight           = Color(0xFF111111)
+val OnLight           = Color(0xFF111110)

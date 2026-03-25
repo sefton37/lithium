@@ -183,6 +183,55 @@ fun SettingsScreen(
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             Spacer(Modifier.height(28.dp))
 
+            // ── Section: Analysis ────────────────────────────────────────────────────────
+            SectionHeader("Analysis")
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "Controls when the AI analysis pipeline runs. Relaxing constraints lets it run more often but may use more battery.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(12.dp))
+
+            ConstraintToggleRow(
+                title = "Require charging",
+                description = "Only run when plugged into a wall charger.",
+                checked = uiState.requireCharging,
+                onCheckedChange = viewModel::setRequireCharging
+            )
+            Spacer(Modifier.height(8.dp))
+
+            ConstraintToggleRow(
+                title = "Require battery not low",
+                description = "Skip analysis if battery is below ~15%.",
+                checked = uiState.requireBatteryNotLow,
+                onCheckedChange = viewModel::setRequireBatteryNotLow
+            )
+            Spacer(Modifier.height(8.dp))
+
+            ConstraintToggleRow(
+                title = "Require device idle",
+                description = "Wait for Doze idle mode. Very restrictive — may prevent analysis from running.",
+                checked = uiState.requireIdle,
+                onCheckedChange = viewModel::setRequireIdle
+            )
+
+            Spacer(Modifier.height(16.dp))
+            Button(
+                onClick = viewModel::runAnalysisNow,
+                enabled = !uiState.isRunningAnalysis,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .defaultMinSize(minHeight = 48.dp)
+                    .semantics { contentDescription = "Run analysis now" }
+            ) {
+                Text(if (uiState.isRunningAnalysis) "Running…" else "Run Analysis Now")
+            }
+
+            Spacer(Modifier.height(28.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Spacer(Modifier.height(28.dp))
+
             // ── Section: Purge Data ─────────────────────────────────────────────────────
             SectionHeader("Purge All Data")
             Spacer(Modifier.height(8.dp))
@@ -385,6 +434,36 @@ private fun RetentionDropdown(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun ConstraintToggleRow(
+    title: String,
+    description: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
+            Text(text = title, style = MaterialTheme.typography.titleSmall)
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            modifier = Modifier.semantics {
+                contentDescription = if (checked) "Disable $title" else "Enable $title"
+            }
+        )
     }
 }
 

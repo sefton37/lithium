@@ -2,6 +2,7 @@ package ai.talkingrock.lithium
 
 import ai.talkingrock.lithium.ai.WorkScheduler
 import android.app.Application
+import android.content.SharedPreferences
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import androidx.work.WorkManager
@@ -27,6 +28,9 @@ class LithiumApp : Application(), Configuration.Provider {
     @Inject
     lateinit var workerFactory: HiltWorkerFactory
 
+    @Inject
+    lateinit var sharedPreferences: SharedPreferences
+
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
             .setWorkerFactory(workerFactory)
@@ -34,20 +38,31 @@ class LithiumApp : Application(), Configuration.Provider {
 
     override fun onCreate() {
         super.onCreate()
-        scheduleAiAnalysisWork()
+        val workManager = WorkManager.getInstance(this)
+        scheduleAiAnalysisWork(workManager)
+        scheduleHealthCheckWork(workManager)
     }
 
     /**
      * Enqueues the AI analysis periodic work request.
      *
-     * Uses [androidx.work.ExistingPeriodicWorkPolicy.KEEP] — if the job is already
-     * enqueued (from a previous app launch or boot), it is left unchanged. This prevents
-     * the 24-hour window from resetting on every app launch.
+     * Uses [androidx.work.ExistingPeriodicWorkPolicy.UPDATE] — updates constraints from
+     * user preferences on each app launch without resetting the 24-hour period timer.
      *
      * WorkManager is initialised lazily on first use. The custom [HiltWorkerFactory] is
      * supplied via [workManagerConfiguration], which is read during that first initialisation.
      */
-    private fun scheduleAiAnalysisWork() {
-        WorkScheduler.scheduleAiAnalysis(WorkManager.getInstance(this))
+    private fun scheduleAiAnalysisWork(workManager: WorkManager) {
+        WorkScheduler.scheduleAiAnalysis(workManager, sharedPreferences)
+    }
+
+    /**
+     * Enqueues the [ai.talkingrock.lithium.ai.HealthCheckWorker] periodic request.
+     *
+     * Runs every 6 hours with no constraints to ensure the listener-disconnection
+     * alert fires regardless of device power state.
+     */
+    private fun scheduleHealthCheckWork(workManager: WorkManager) {
+        WorkScheduler.scheduleHealthCheck(workManager)
     }
 }

@@ -42,6 +42,13 @@ interface NotificationDao {
     suspend fun getUnclassified(limit: Int): List<NotificationRecord>
 
     /**
+     * Returns ongoing notifications that were previously classified as 'unknown'.
+     * Used for one-time reclassification after the BACKGROUND category was introduced.
+     */
+    @Query("SELECT * FROM notifications WHERE is_ongoing = 1 AND ai_classification = 'unknown' ORDER BY posted_at_ms ASC LIMIT :limit")
+    suspend fun getOngoingMisclassified(limit: Int): List<NotificationRecord>
+
+    /**
      * Returns all notifications from a specific package, newest first.
      */
     @Query("SELECT * FROM notifications WHERE package_name = :packageName ORDER BY posted_at_ms DESC")
@@ -85,6 +92,14 @@ interface NotificationDao {
     /** Returns approximate count of rows in the notifications table. */
     @Query("SELECT COUNT(*) FROM notifications")
     suspend fun count(): Int
+
+    /** Returns the count of notifications that have been classified by the AI worker. */
+    @Query("SELECT COUNT(*) FROM notifications WHERE ai_classification IS NOT NULL")
+    suspend fun countClassified(): Int
+
+    /** Returns the number of distinct apps that have at least one classified notification. */
+    @Query("SELECT COUNT(DISTINCT package_name) FROM notifications WHERE ai_classification IS NOT NULL")
+    suspend fun countDistinctClassifiedApps(): Int
 
     /** Delete all notification records. Used by purge-all-data. */
     @Query("DELETE FROM notifications")

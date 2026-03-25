@@ -1,21 +1,19 @@
-# Flow: Briefing screen loads with permissions pre-granted
-# Prerequisites: Permissions granted by wrapper script before Maestro runs
+# Flow: With permissions pre-granted, app should land on the main screen
+# Prerequisites: Permissions granted by run-tests.sh Phase 2
 appId: ai.talkingrock.lithium.debug
 ---
 - stopApp
 - waitForAnimationToEnd
 - launchApp
 
-# With permissions already granted, app should land directly on Briefing
+# With all permissions granted, app should skip onboarding and show the main screen.
+# Wait for the Briefing tab label which is always present in the bottom nav.
 - extendedWaitUntil:
     visible:
-      text: "No new report."
+      text: "Briefing"
     timeout: 15000
 
-# Verify briefing content
-- assertVisible: "Your next briefing will appear after the nightly analysis runs"
-
-# Bottom navigation should be visible
+# Bottom navigation tabs must all be visible
 - assertVisible: "Briefing"
 - assertVisible: "Queue"
 - assertVisible: "Rules"

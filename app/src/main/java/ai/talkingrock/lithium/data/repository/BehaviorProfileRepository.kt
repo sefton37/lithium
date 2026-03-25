@@ -100,6 +100,7 @@ class BehaviorProfileRepository @Inject constructor(
             NotificationCategory.TRANSACTIONAL -> dao.incrementVoteTransactional(pkg, channel, nowMs)
             NotificationCategory.SYSTEM -> dao.incrementVoteSystem(pkg, channel, nowMs)
             NotificationCategory.SOCIAL_SIGNAL -> dao.incrementVoteSocialSignal(pkg, channel, nowMs)
+            NotificationCategory.BACKGROUND -> { /* No vote column for background — ongoing notifications are not user decisions */ }
             NotificationCategory.UNKNOWN -> { /* No vote column for unknown */ }
         }
     }

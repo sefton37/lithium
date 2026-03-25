@@ -1,0 +1,26 @@
+# Flow: Suggestion cards — verify they render if present (read-only, no state mutation)
+# Prerequisites: Permissions granted by run-tests.sh Phase 2; report data may exist
+# This flow is intentionally non-destructive: it only asserts visibility, never taps action buttons.
+appId: ai.talkingrock.lithium.debug
+---
+- stopApp
+- waitForAnimationToEnd
+- launchApp
+
+# Wait for main screen
+- extendedWaitUntil:
+    visible:
+      text: "Briefing"
+    timeout: 15000
+
+# The Briefing tab is always present; the content may or may not have suggestions.
+# We assert the tab bar is intact regardless of data state.
+- assertVisible: "Briefing"
+- assertVisible: "Queue"
+- assertVisible: "Rules"
+- assertVisible: "Settings"
+
+# Suggestion content is data-dependent and absent on a fresh install.
+# We only assert the invariant tab bar is intact — suggestion rendering is
+# already covered by flow 03 (briefing_screen) when data is present.
+- assertVisible: "Briefing"

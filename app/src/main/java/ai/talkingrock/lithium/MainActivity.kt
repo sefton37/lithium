@@ -1,5 +1,6 @@
 package ai.talkingrock.lithium
 
+import android.content.SharedPreferences
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
@@ -22,12 +23,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.view.WindowCompat
 import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import ai.talkingrock.lithium.data.Prefs
 import ai.talkingrock.lithium.ui.briefing.BriefingScreen
 import ai.talkingrock.lithium.ui.debug.DebugNotificationLogScreen
 import ai.talkingrock.lithium.ui.queue.QueueScreen
@@ -37,6 +40,7 @@ import ai.talkingrock.lithium.ui.settings.SettingsScreen
 import ai.talkingrock.lithium.ui.setup.SetupScreen
 import ai.talkingrock.lithium.ui.theme.LithiumTheme
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
 /**
  * Single-activity host for the Lithium Compose UI.
@@ -56,6 +60,8 @@ import dagger.hilt.android.AndroidEntryPoint
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
+    @Inject lateinit var sharedPreferences: SharedPreferences
+
     override fun onCreate(savedInstanceState: Bundle?) {
         // Apply FLAG_SECURE in release builds to prevent screenshots/recording.
         // Disabled in debug builds so Maestro and other testing tools can access the UI.
@@ -68,13 +74,31 @@ class MainActivity : ComponentActivity() {
 
         super.onCreate(savedInstanceState)
 
+        // Determine start destination:
+        // - New user (never completed onboarding) → Setup
+        // - Returning user with notification access → Briefing
+        // - Returning user who lost notification access → Setup (to re-grant)
+        //
+        // IMPORTANT: Use NotificationManagerCompat (synchronous system call) instead of
+        // ListenerState.isConnected, which initializes to false at cold start before the
+        // service reconnects. This prevents routing every cold start to Setup.
+        val onboardingDone = sharedPreferences.getBoolean(Prefs.ONBOARDING_COMPLETE, false)
+        val hasNotificationAccess = NotificationManagerCompat
+            .getEnabledListenerPackages(this)
+            .contains(packageName)
+        val startRoute = if (onboardingDone && hasNotificationAccess) {
+            Screen.Briefing.route
+        } else {
+            Screen.Setup.route
+        }
+
         setContent {
             LithiumTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    LithiumNavHost()
+                    LithiumNavHost(startDestination = startRoute)
                 }
             }
         }
@@ -86,7 +110,7 @@ class MainActivity : ComponentActivity() {
 // -----------------------------------------------------------------------------------------
 
 @Composable
-private fun LithiumNavHost() {
+private fun LithiumNavHost(startDestination: String = Screen.Setup.route) {
     val navController = rememberNavController()
     val currentBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = currentBackStackEntry?.destination?.route
@@ -103,7 +127,7 @@ private fun LithiumNavHost() {
     ) { innerPadding ->
         NavHost(
             navController = navController,
-            startDestination = Screen.Setup.route,
+            startDestination = startDestination,
             modifier = Modifier.padding(innerPadding)
         ) {
             composable(Screen.Setup.route) {

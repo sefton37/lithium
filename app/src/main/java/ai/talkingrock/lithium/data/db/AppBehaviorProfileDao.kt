@@ -28,11 +28,15 @@ interface AppBehaviorProfileDao {
     @Query("""
         INSERT INTO app_behavior_profiles (
             package_name, channel_id, total_received, total_tapped, total_dismissed,
-            total_auto_removed, dominant_category, first_seen_ms, last_seen_ms,
-            last_updated_ms
+            total_auto_removed, dominant_category, total_sessions, total_session_ms,
+            category_vote_personal, category_vote_engagement_bait, category_vote_promotional,
+            category_vote_transactional, category_vote_system, category_vote_social_signal,
+            first_seen_ms, last_seen_ms, last_updated_ms, profile_version
         ) VALUES (
             :pkg, :channel, 1, :tapped, :dismissed, :autoRemoved, :categoryLabel,
-            :nowMs, :nowMs, :nowMs
+            0, 0,
+            0, 0, 0, 0, 0, 0,
+            :nowMs, :nowMs, :nowMs, 1
         )
         ON CONFLICT(package_name, channel_id) DO UPDATE SET
             total_received     = total_received + 1,
@@ -104,9 +108,16 @@ interface AppBehaviorProfileDao {
     @Query("""
         INSERT INTO app_behavior_profiles (
             package_name, channel_id, total_sessions, total_session_ms,
-            first_seen_ms, last_seen_ms, last_updated_ms
+            total_received, total_tapped, total_dismissed, total_auto_removed,
+            dominant_category, category_vote_personal, category_vote_engagement_bait,
+            category_vote_promotional, category_vote_transactional, category_vote_system,
+            category_vote_social_signal, first_seen_ms, last_seen_ms, last_updated_ms,
+            profile_version
         ) VALUES (
-            :pkg, '', :sessionCount, :sessionMs, :nowMs, :nowMs, :nowMs
+            :pkg, '', :sessionCount, :sessionMs,
+            0, 0, 0, 0,
+            'unknown', 0, 0, 0, 0, 0, 0,
+            :nowMs, :nowMs, :nowMs, 1
         )
         ON CONFLICT(package_name, channel_id) DO UPDATE SET
             total_sessions  = total_sessions + :sessionCount,

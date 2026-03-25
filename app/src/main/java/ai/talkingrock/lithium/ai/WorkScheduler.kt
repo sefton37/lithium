@@ -1,10 +1,14 @@
 package ai.talkingrock.lithium.ai
 
+import android.content.SharedPreferences
 import android.util.Log
 import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import ai.talkingrock.lithium.data.Prefs
 import java.util.concurrent.TimeUnit
 
 /**
@@ -13,30 +17,29 @@ import java.util.concurrent.TimeUnit
  * Both [ai.talkingrock.lithium.LithiumApp] (on startup) and
  * [ai.talkingrock.lithium.service.BootReceiver] (on reboot) call into this object to
  * ensure the AI analysis job is always scheduled without duplicating the constraint setup.
+ *
+ * Constraints are user-configurable via Settings. Defaults:
+ * - Charging: true (wall charger recommended)
+ * - Battery not low: true
+ * - Device idle: false (relaxed — original requirement made the worker nearly unreachable)
  */
 object WorkScheduler {
 
     private const val TAG = "WorkScheduler"
 
+    /** One-shot work name for manual "Run Now" triggers. */
+    private const val MANUAL_WORK_NAME = "lithium_ai_analysis_manual"
+
     /**
      * Enqueues or verifies the [AiAnalysisWorker] periodic request.
      *
-     * Constraints:
-     * - Charging: avoids battery drain during inference
-     * - Battery not low: belt-and-suspenders battery safety
-     * - Device idle: inference does not compete with foreground work
+     * Reads constraint preferences from [prefs]. If [prefs] is null, uses defaults.
      *
-     * Policy: [ExistingPeriodicWorkPolicy.KEEP] — the existing enqueue is left unchanged
-     * if the work is already scheduled. The 24-hour interval timer is not reset on app launch.
-     *
-     * @param workManager Caller-provided [WorkManager] instance (avoids re-initialising it).
+     * Policy: [ExistingPeriodicWorkPolicy.UPDATE] — updates constraints from prefs on each
+     * app launch without resetting the 24-hour interval timer.
      */
-    fun scheduleAiAnalysis(workManager: WorkManager) {
-        val constraints = Constraints.Builder()
-            .setRequiresCharging(true)
-            .setRequiresBatteryNotLow(true)
-            .setRequiresDeviceIdle(true)
-            .build()
+    fun scheduleAiAnalysis(workManager: WorkManager, prefs: SharedPreferences? = null) {
+        val constraints = buildConstraints(prefs)
 
         val workRequest = PeriodicWorkRequestBuilder<AiAnalysisWorker>(
             repeatInterval = 24,
@@ -47,10 +50,101 @@ object WorkScheduler {
 
         workManager.enqueueUniquePeriodicWork(
             AiAnalysisWorker.WORK_NAME,
+            ExistingPeriodicWorkPolicy.UPDATE,
+            workRequest
+        )
+
+        Log.d(TAG, "scheduleAiAnalysis: enqueued (UPDATE policy)")
+    }
+
+    /**
+     * Re-enqueues the periodic worker with updated constraints.
+     *
+     * Uses [ExistingPeriodicWorkPolicy.UPDATE] to replace constraints on the existing
+     * work without resetting the period timer.
+     */
+    fun rescheduleWithNewConstraints(workManager: WorkManager, prefs: SharedPreferences) {
+        val constraints = buildConstraints(prefs)
+
+        val workRequest = PeriodicWorkRequestBuilder<AiAnalysisWorker>(
+            repeatInterval = 24,
+            repeatIntervalTimeUnit = TimeUnit.HOURS
+        )
+            .setConstraints(constraints)
+            .build()
+
+        workManager.enqueueUniquePeriodicWork(
+            AiAnalysisWorker.WORK_NAME,
+            ExistingPeriodicWorkPolicy.UPDATE,
+            workRequest
+        )
+
+        Log.d(TAG, "rescheduleWithNewConstraints: updated constraints")
+    }
+
+    /**
+     * Immediately enqueues a one-shot [AiAnalysisWorker] with no constraints.
+     *
+     * Uses [ExistingWorkPolicy.REPLACE] so tapping "Run Now" multiple times
+     * doesn't queue duplicates.
+     */
+    fun runNow(workManager: WorkManager) {
+        val workRequest = OneTimeWorkRequestBuilder<AiAnalysisWorker>()
+            .build()
+
+        workManager.enqueueUniqueWork(
+            MANUAL_WORK_NAME,
+            ExistingWorkPolicy.REPLACE,
+            workRequest
+        )
+
+        Log.d(TAG, "runNow: enqueued immediate one-shot analysis")
+    }
+
+    /**
+     * Enqueues or verifies the [HealthCheckWorker] periodic request.
+     *
+     * Runs every 6 hours with no constraints — the check must fire even when the
+     * device is not charging, battery is low, or the device is not idle.
+     *
+     * Policy: [ExistingPeriodicWorkPolicy.KEEP] — if the job already exists, its
+     * schedule is preserved unchanged. There are no user-configurable constraints
+     * to update, so UPDATE would only reset the period timer needlessly.
+     */
+    fun scheduleHealthCheck(workManager: WorkManager) {
+        val workRequest = PeriodicWorkRequestBuilder<HealthCheckWorker>(
+            repeatInterval = 6,
+            repeatIntervalTimeUnit = TimeUnit.HOURS
+        ).build()
+
+        workManager.enqueueUniquePeriodicWork(
+            HealthCheckWorker.WORK_NAME,
             ExistingPeriodicWorkPolicy.KEEP,
             workRequest
         )
 
-        Log.d(TAG, "scheduleAiAnalysis: enqueued (KEEP policy)")
+        Log.d(TAG, "scheduleHealthCheck: enqueued (KEEP policy, 6h interval, no constraints)")
+    }
+
+    private fun buildConstraints(prefs: SharedPreferences?): Constraints {
+        val requireCharging = prefs?.getBoolean(
+            Prefs.PREF_REQUIRE_CHARGING, Prefs.DEFAULT_REQUIRE_CHARGING
+        ) ?: Prefs.DEFAULT_REQUIRE_CHARGING
+
+        val requireBatteryNotLow = prefs?.getBoolean(
+            Prefs.PREF_REQUIRE_BATTERY_NOT_LOW, Prefs.DEFAULT_REQUIRE_BATTERY_NOT_LOW
+        ) ?: Prefs.DEFAULT_REQUIRE_BATTERY_NOT_LOW
+
+        val requireIdle = prefs?.getBoolean(
+            Prefs.PREF_REQUIRE_IDLE, Prefs.DEFAULT_REQUIRE_IDLE
+        ) ?: Prefs.DEFAULT_REQUIRE_IDLE
+
+        Log.d(TAG, "buildConstraints: charging=$requireCharging, batteryNotLow=$requireBatteryNotLow, idle=$requireIdle")
+
+        return Constraints.Builder()
+            .setRequiresCharging(requireCharging)
+            .setRequiresBatteryNotLow(requireBatteryNotLow)
+            .setRequiresDeviceIdle(requireIdle)
+            .build()
     }
 }

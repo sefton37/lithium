@@ -1,0 +1,9 @@
+# Training artifacts
+data/
+output/
+.venv/
+__pycache__/
+*.pyc
+
+# Model checkpoints
+checkpoints/

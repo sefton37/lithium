@@ -1,0 +1,53 @@
+# Flow: App resilience after force-stop and relaunch
+# Verifies the app recovers gracefully and all screens are accessible.
+# NOTE: runScript with adb commands is unreliable in Maestro's JS sandbox.
+# This flow tests the app's ability to recover from process death instead.
+appId: ai.talkingrock.lithium.debug
+---
+- launchApp
+
+# Verify app is functional
+- extendedWaitUntil:
+    visible:
+      text: "Briefing"
+    timeout: 15000
+
+# Navigate to each tab
+- tapOn: "Settings"
+- extendedWaitUntil:
+    visible:
+      text: "Permissions"
+    timeout: 5000
+
+- tapOn: "Rules"
+- waitForAnimationToEnd
+
+- tapOn: "Queue"
+- waitForAnimationToEnd
+
+# Force stop mid-session
+- stopApp
+- waitForAnimationToEnd
+
+# Relaunch — app should recover
+- launchApp
+- extendedWaitUntil:
+    visible:
+      text: "Briefing"
+    timeout: 15000
+
+# All tabs should still work
+- tapOn: "Queue"
+- waitForAnimationToEnd
+- tapOn: "Rules"
+- waitForAnimationToEnd
+- tapOn: "Settings"
+- extendedWaitUntil:
+    visible:
+      text: "Permissions"
+    timeout: 5000
+- tapOn: "Briefing"
+- extendedWaitUntil:
+    visible:
+      text: "Briefing"
+    timeout: 5000

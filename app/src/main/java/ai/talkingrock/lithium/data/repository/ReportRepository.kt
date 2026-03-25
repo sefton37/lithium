@@ -22,8 +22,15 @@ class ReportRepository @Inject constructor(
     private val suggestionDao: SuggestionDao
 ) {
 
-    /** Insert a new AI-generated report. Returns the generated row ID. */
+    /**
+     * Insert a new AI-generated report. Returns the generated row ID.
+     *
+     * Marks all previous unreviewed reports as reviewed first — only the latest
+     * report matters, and stale unreviewed reports cause the UI to cycle through
+     * identical-looking suggestions after the user reviews one.
+     */
     suspend fun insertReport(report: Report): Long = withContext(Dispatchers.IO) {
+        reportDao.markAllReviewed()
         reportDao.insertReport(report)
     }
 

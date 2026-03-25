@@ -8,8 +8,9 @@ import android.os.Process
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import ai.talkingrock.lithium.ai.AiAnalysisWorker.Companion.DEFAULT_RETENTION_DAYS
-import ai.talkingrock.lithium.ai.AiAnalysisWorker.Companion.PREF_RETENTION_DAYS
+import androidx.work.WorkManager
+import ai.talkingrock.lithium.ai.WorkScheduler
+import ai.talkingrock.lithium.data.Prefs
 import ai.talkingrock.lithium.data.db.AppBehaviorProfileDao
 import ai.talkingrock.lithium.data.db.NotificationDao
 import ai.talkingrock.lithium.data.db.QueueDao
@@ -52,11 +53,15 @@ data class SettingsUiState(
     val notificationAccessGranted: Boolean = false,
     val usageAccessGranted: Boolean = false,
     val contactsGranted: Boolean = false,
-    val retentionDays: Int = DEFAULT_RETENTION_DAYS,
+    val retentionDays: Int = Prefs.DEFAULT_RETENTION_DAYS,
     val notificationCount: Int = 0,
     val diagnosticsEnabled: Boolean = false,
     val isPurging: Boolean = false,
-    val purgeComplete: Boolean = false
+    val purgeComplete: Boolean = false,
+    val requireCharging: Boolean = Prefs.DEFAULT_REQUIRE_CHARGING,
+    val requireBatteryNotLow: Boolean = Prefs.DEFAULT_REQUIRE_BATTERY_NOT_LOW,
+    val requireIdle: Boolean = Prefs.DEFAULT_REQUIRE_IDLE,
+    val isRunningAnalysis: Boolean = false
 )
 
 /**
@@ -83,14 +88,16 @@ class SettingsViewModel @Inject constructor(
 ) : ViewModel() {
 
     companion object {
-        private const val PREF_DIAGNOSTICS = "diagnostics_enabled"
         private const val APP_VERSION = "0.1.0"
     }
 
     private val _uiState = MutableStateFlow(
         SettingsUiState(
-            retentionDays = sharedPreferences.getInt(PREF_RETENTION_DAYS, DEFAULT_RETENTION_DAYS),
-            diagnosticsEnabled = sharedPreferences.getBoolean(PREF_DIAGNOSTICS, false)
+            retentionDays = sharedPreferences.getInt(Prefs.PREF_RETENTION_DAYS, Prefs.DEFAULT_RETENTION_DAYS),
+            diagnosticsEnabled = sharedPreferences.getBoolean(Prefs.PREF_DIAGNOSTICS, false),
+            requireCharging = sharedPreferences.getBoolean(Prefs.PREF_REQUIRE_CHARGING, Prefs.DEFAULT_REQUIRE_CHARGING),
+            requireBatteryNotLow = sharedPreferences.getBoolean(Prefs.PREF_REQUIRE_BATTERY_NOT_LOW, Prefs.DEFAULT_REQUIRE_BATTERY_NOT_LOW),
+            requireIdle = sharedPreferences.getBoolean(Prefs.PREF_REQUIRE_IDLE, Prefs.DEFAULT_REQUIRE_IDLE)
         )
     )
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
@@ -141,13 +148,13 @@ class SettingsViewModel @Inject constructor(
 
     /** Updates and persists the data-retention period. */
     fun setRetentionDays(days: Int) {
-        sharedPreferences.edit().putInt(PREF_RETENTION_DAYS, days).apply()
+        sharedPreferences.edit().putInt(Prefs.PREF_RETENTION_DAYS, days).apply()
         _uiState.update { it.copy(retentionDays = days) }
     }
 
     /** Toggles and persists the diagnostics opt-in preference. */
     fun setDiagnosticsEnabled(enabled: Boolean) {
-        sharedPreferences.edit().putBoolean(PREF_DIAGNOSTICS, enabled).apply()
+        sharedPreferences.edit().putBoolean(Prefs.PREF_DIAGNOSTICS, enabled).apply()
         _uiState.update { it.copy(diagnosticsEnabled = enabled) }
     }
 
@@ -165,6 +172,10 @@ class SettingsViewModel @Inject constructor(
                 suggestionDao.deleteAll()
                 queueDao.deleteAll()
                 behaviorProfileDao.deleteAll()
+                // Reset data-readiness flag so it re-fires after new data accumulates
+                sharedPreferences.edit()
+                    .putBoolean(Prefs.DATA_READY_NOTIFIED, false)
+                    .apply()
                 _uiState.update { it.copy(
                     isPurging = false,
                     purgeComplete = true,
@@ -181,6 +192,46 @@ class SettingsViewModel @Inject constructor(
     /** Called after the snackbar has shown, so purgeComplete doesn't re-trigger on recompose. */
     fun acknowledgeSnackbar() {
         _uiState.update { it.copy(purgeComplete = false) }
+    }
+
+    // -----------------------------------------------------------------------------------------
+    // Worker constraint settings
+    // -----------------------------------------------------------------------------------------
+
+    fun setRequireCharging(enabled: Boolean) {
+        sharedPreferences.edit().putBoolean(Prefs.PREF_REQUIRE_CHARGING, enabled).apply()
+        _uiState.update { it.copy(requireCharging = enabled) }
+        rescheduleWorker()
+    }
+
+    fun setRequireBatteryNotLow(enabled: Boolean) {
+        sharedPreferences.edit().putBoolean(Prefs.PREF_REQUIRE_BATTERY_NOT_LOW, enabled).apply()
+        _uiState.update { it.copy(requireBatteryNotLow = enabled) }
+        rescheduleWorker()
+    }
+
+    fun setRequireIdle(enabled: Boolean) {
+        sharedPreferences.edit().putBoolean(Prefs.PREF_REQUIRE_IDLE, enabled).apply()
+        _uiState.update { it.copy(requireIdle = enabled) }
+        rescheduleWorker()
+    }
+
+    /** Immediately runs the AI analysis pipeline (no constraints). */
+    fun runAnalysisNow() {
+        _uiState.update { it.copy(isRunningAnalysis = true) }
+        val workManager = WorkManager.getInstance(context)
+        WorkScheduler.runNow(workManager)
+        viewModelScope.launch {
+            snackbarMessages.emit("Analysis started — check Briefing when complete.")
+            // Reset the flag after a brief delay so the button re-enables
+            kotlinx.coroutines.delay(3_000)
+            _uiState.update { it.copy(isRunningAnalysis = false) }
+        }
+    }
+
+    private fun rescheduleWorker() {
+        val workManager = WorkManager.getInstance(context)
+        WorkScheduler.rescheduleWithNewConstraints(workManager, sharedPreferences)
     }
 
     // -----------------------------------------------------------------------------------------

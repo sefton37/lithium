@@ -2,23 +2,29 @@ package ai.talkingrock.lithium.ui.setup
 
 import android.app.AppOpsManager
 import android.content.Context
+import android.content.SharedPreferences
 import android.content.pm.PackageManager
+import android.os.PowerManager
 import android.os.Process
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import ai.talkingrock.lithium.data.Prefs
 import ai.talkingrock.lithium.service.ListenerState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class SetupUiState(
     val notificationAccessGranted: Boolean = false,
+    val batteryOptimizationExempt: Boolean = false,
     val usageAccessGranted: Boolean = false,
     val contactsGranted: Boolean = false,
 )
@@ -26,42 +32,59 @@ data class SetupUiState(
 /**
  * ViewModel for [SetupScreen].
  *
- * Derives permission state from [ListenerState] (notification access) and
- * [AppOpsManager] (usage access). Contact permission is checked via
- * [PackageManager.checkPermission].
+ * Derives permission state from [ListenerState] (notification access, live via StateFlow)
+ * and one-shot checks for battery optimization, usage access, and contacts.
  *
- * [usageAccessGranted] and [contactsGranted] are polled as one-shot flows —
- * they update when the ViewModel is created. The user is expected to return
- * from Settings via back navigation which triggers recomposition.
+ * [refresh] must be called when the user returns from a system settings dialog
+ * (battery exemption, usage access, contacts) so the UI reflects the updated state.
  */
 @HiltViewModel
 class SetupViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val listenerState: ListenerState
+    private val listenerState: ListenerState,
+    private val sharedPreferences: SharedPreferences
 ) : ViewModel() {
+
+    /** True if the user has previously completed the onboarding flow. */
+    val onboardingComplete: Boolean
+        get() = sharedPreferences.getBoolean(Prefs.ONBOARDING_COMPLETE, false)
+
+    /** Mark onboarding as complete. Called when the user taps "Get Started" on the last page. */
+    fun markOnboardingComplete() {
+        sharedPreferences.edit()
+            .putBoolean(Prefs.ONBOARDING_COMPLETE, true)
+            .apply()
+    }
+
+    /** Holds the latest polled permission state for non-reactive checks. */
+    private val _polledState = MutableStateFlow(pollPermissions())
 
     val uiState: StateFlow<SetupUiState> = combine(
         listenerState.isConnected,
-        flow { emit(checkUsageAccess()) },
-        flow { emit(checkContactsPermission()) }
-    ) { notificationGranted, usageGranted, contactsGranted ->
-        SetupUiState(
-            notificationAccessGranted = notificationGranted,
-            usageAccessGranted = usageGranted,
-            contactsGranted = contactsGranted,
-        )
+        _polledState
+    ) { notificationGranted, polled ->
+        polled.copy(notificationAccessGranted = notificationGranted)
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
         initialValue = SetupUiState()
     )
 
-    /** Refreshes usage access and contacts state (call when returning from Settings). */
-    fun refresh(): SetupUiState = SetupUiState(
-        notificationAccessGranted = listenerState.isConnected.value,
+    /** Re-checks all non-reactive permissions. Call when returning from system dialogs. */
+    fun refresh() {
+        _polledState.update { pollPermissions() }
+    }
+
+    private fun pollPermissions(): SetupUiState = SetupUiState(
+        batteryOptimizationExempt = checkBatteryOptimization(),
         usageAccessGranted = checkUsageAccess(),
         contactsGranted = checkContactsPermission(),
     )
+
+    private fun checkBatteryOptimization(): Boolean {
+        val powerManager = context.getSystemService(PowerManager::class.java)
+        return powerManager.isIgnoringBatteryOptimizations(context.packageName)
+    }
 
     private fun checkUsageAccess(): Boolean {
         val appOps = context.getSystemService(AppOpsManager::class.java)

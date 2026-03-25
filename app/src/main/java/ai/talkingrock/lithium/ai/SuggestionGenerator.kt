@@ -64,9 +64,11 @@ class SuggestionGenerator @Inject constructor() {
 
             val category = dominantCategory(stats.packageName, byCategory)
 
-            // Safety: never suggest suppressing personal or transactional notifications.
+            // Safety: never suggest suppressing personal, transactional, or background notifications.
+            // Background (media controls, navigation, etc.) are ongoing by design — no rule needed.
             if (category == NotificationCategory.PERSONAL ||
-                category == NotificationCategory.TRANSACTIONAL) continue
+                category == NotificationCategory.TRANSACTIONAL ||
+                category == NotificationCategory.BACKGROUND) continue
 
             val recentTapRate = if (stats.totalCount > 0) {
                 stats.tappedCount.toFloat() / stats.totalCount

@@ -1,7 +1,9 @@
 package ai.talkingrock.lithium.ui.briefing
 
+import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import ai.talkingrock.lithium.data.Prefs
 import ai.talkingrock.lithium.data.model.Report
 import ai.talkingrock.lithium.data.model.Suggestion
 import ai.talkingrock.lithium.data.repository.ReportRepository
@@ -33,7 +35,9 @@ data class BriefingUiState(
     val suggestions: List<Suggestion> = emptyList(),
     val isLoading: Boolean = true,
     val commentDrafts: Map<Long, String> = emptyMap(),
-    val expandedCommentId: Long? = null
+    val expandedCommentId: Long? = null,
+    /** True when enough data has been collected for meaningful recommendations. */
+    val dataReady: Boolean = false
 )
 
 /**
@@ -50,18 +54,25 @@ data class BriefingUiState(
 @HiltViewModel
 class BriefingViewModel @Inject constructor(
     private val reportRepository: ReportRepository,
-    private val ruleRepository: RuleRepository
+    private val ruleRepository: RuleRepository,
+    private val sharedPreferences: SharedPreferences
 ) : ViewModel() {
 
     // Ephemeral UI state for comment expansion and drafts — not persisted.
     private val _uiExtras = MutableStateFlow(UiExtras())
+
+    private val dataReady: Boolean
+        get() = sharedPreferences.getBoolean(Prefs.DATA_READY_NOTIFIED, false)
 
     @OptIn(ExperimentalCoroutinesApi::class)
     val uiState: StateFlow<BriefingUiState> = reportRepository
         .getLatestUnreviewed()
         .flatMapLatest { report ->
             if (report == null) {
-                flowOf(BriefingUiState(report = null, suggestions = emptyList(), isLoading = false))
+                flowOf(BriefingUiState(
+                    report = null, suggestions = emptyList(),
+                    isLoading = false, dataReady = dataReady
+                ))
             } else {
                 reportRepository.getPendingForReport(report.id)
                     .combine(flowOf(report)) { suggestions, r ->
@@ -73,7 +84,8 @@ class BriefingViewModel @Inject constructor(
                             suggestions = suggestions,
                             isLoading = false,
                             commentDrafts = extras.commentDrafts,
-                            expandedCommentId = extras.expandedCommentId
+                            expandedCommentId = extras.expandedCommentId,
+                            dataReady = dataReady
                         )
                     }
             }

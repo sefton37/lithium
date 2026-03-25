@@ -6,12 +6,15 @@ import android.util.Log
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import ai.talkingrock.lithium.data.Prefs
 import ai.talkingrock.lithium.data.db.NotificationDao
 import ai.talkingrock.lithium.data.db.SessionDao
 import ai.talkingrock.lithium.data.repository.BehaviorProfileRepository
 import ai.talkingrock.lithium.data.repository.ReportRepository
+import ai.talkingrock.lithium.service.DataReadinessNotifier
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
+import javax.inject.Named
 
 /**
  * WorkManager worker that classifies unclassified notifications then produces the daily briefing.
@@ -28,13 +31,15 @@ import dagger.assisted.AssistedInject
  * for scheduling and re-scheduling logic.
  *
  * Worker logic:
+ * 0. Load AI models (ONNX and/or llama.cpp) from the models directory.
  * 1. Load behavioral profiles for profile-aware classification.
- * 2. Classify up to [MAX_BATCH_SIZE] unclassified records.
+ * 2. Classify up to [MAX_BATCH_SIZE] unclassified records (3-tier: ONNX → llama.cpp → heuristic).
  * 3. Run [PatternAnalyzer] to aggregate stats over the past 24 hours.
  * 4. Run [ReportGenerator] to produce a plain-language report.
  * 5. Run [SuggestionGenerator] to produce rule suggestions (with blended tap rate).
  * 6. Data retention cleanup.
  * 7. Accumulate behavioral profiles from this cycle's data.
+ * 8. Release AI models.
  */
 @HiltWorker
 class AiAnalysisWorker @AssistedInject constructor(
@@ -42,17 +47,36 @@ class AiAnalysisWorker @AssistedInject constructor(
     @Assisted workerParams: WorkerParameters,
     private val notificationDao: NotificationDao,
     private val sessionDao: SessionDao,
+    private val aiEngine: AiEngine,
+    private val llamaEngine: LlamaEngine,
     private val classifier: NotificationClassifier,
     private val patternAnalyzer: PatternAnalyzer,
     private val reportGenerator: ReportGenerator,
     private val suggestionGenerator: SuggestionGenerator,
     private val reportRepository: ReportRepository,
     private val behaviorProfileRepository: BehaviorProfileRepository,
-    private val sharedPreferences: SharedPreferences
+    private val sharedPreferences: SharedPreferences,
+    @Named("modelDir") private val modelDir: String
 ) : CoroutineWorker(appContext, workerParams) {
 
     override suspend fun doWork(): Result {
         Log.d(TAG, "doWork: starting analysis pass")
+
+        // ---------------------------------------------------------------------------------
+        // Step 0: Load AI models (ONNX and/or llama.cpp) from the models directory
+        // ---------------------------------------------------------------------------------
+        try {
+            aiEngine.loadModel(modelDir)
+            llamaEngine.loadModel(modelDir)
+            val tier = when {
+                aiEngine.isModelLoaded() -> "ONNX"
+                llamaEngine.isModelLoaded() -> "llama.cpp"
+                else -> "heuristic"
+            }
+            Log.d(TAG, "doWork: classification tier=$tier")
+        } catch (e: Exception) {
+            Log.e(TAG, "doWork: model loading failed, proceeding with heuristic", e)
+        }
 
         // ---------------------------------------------------------------------------------
         // Step 1: Load behavioral profiles for profile-aware classification
@@ -102,6 +126,58 @@ class AiAnalysisWorker @AssistedInject constructor(
         }
 
         // ---------------------------------------------------------------------------------
+        // Step 2.1: Reclassify ongoing notifications tagged "unknown" as BACKGROUND
+        // One-time migration: before the BACKGROUND category existed, ongoing
+        // notifications (media controls, navigation, etc.) were classified as "unknown".
+        // ---------------------------------------------------------------------------------
+        try {
+            val misclassified = notificationDao.getOngoingMisclassified(limit = MAX_BATCH_SIZE)
+            if (misclassified.isNotEmpty()) {
+                Log.d(TAG, "doWork: reclassifying ${misclassified.size} ongoing→background record(s)")
+                for (record in misclassified) {
+                    val profileKey = Pair(record.packageName, record.channelId ?: "")
+                    val profile = profiles[profileKey]
+                    val result = classifier.classify(record, profile)
+                    notificationDao.updateClassification(
+                        id = record.id,
+                        classification = result.label,
+                        confidence = result.confidence
+                    )
+                }
+                Log.d(TAG, "doWork: ongoing reclassification complete — ${misclassified.size} record(s)")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "doWork: ongoing reclassification failed", e)
+            // Non-fatal: will retry on next run.
+        }
+
+        // ---------------------------------------------------------------------------------
+        // Step 2.5: Check data readiness threshold (one-time notification)
+        // ---------------------------------------------------------------------------------
+        if (!sharedPreferences.getBoolean(Prefs.DATA_READY_NOTIFIED, false)) {
+            try {
+                val classifiedCount = notificationDao.countClassified()
+                val distinctApps = notificationDao.countDistinctClassifiedApps()
+
+                if (classifiedCount >= Prefs.DATA_READY_MIN_COUNT &&
+                    distinctApps >= Prefs.DATA_READY_MIN_APPS) {
+                    Log.i(TAG, "doWork: data readiness threshold reached " +
+                            "(classified=$classifiedCount, apps=$distinctApps) — notifying user")
+                    sharedPreferences.edit()
+                        .putBoolean(Prefs.DATA_READY_NOTIFIED, true)
+                        .apply()
+                    DataReadinessNotifier.notify(applicationContext)
+                } else {
+                    Log.d(TAG, "doWork: data not yet ready " +
+                            "(classified=$classifiedCount/${Prefs.DATA_READY_MIN_COUNT}, " +
+                            "apps=$distinctApps/${Prefs.DATA_READY_MIN_APPS})")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "doWork: readiness check failed", e)
+            }
+        }
+
+        // ---------------------------------------------------------------------------------
         // Step 3: Aggregate patterns for the past 24 hours
         // ---------------------------------------------------------------------------------
         val since = System.currentTimeMillis() - ANALYSIS_WINDOW_MS
@@ -118,7 +194,9 @@ class AiAnalysisWorker @AssistedInject constructor(
         val contactVsAlgo = patternAnalyzer.getContactVsAlgorithmicRatio(since)
 
         val totalInWindow = byCategory.values.sumOf { it.size }
-        Log.d(TAG, "doWork: found $totalInWindow notifications in window")
+        val backgroundCount = byCategory[NotificationCategory.BACKGROUND]?.size ?: 0
+        val alertCount = totalInWindow - backgroundCount
+        Log.d(TAG, "doWork: found $totalInWindow notifications in window ($alertCount alerts, $backgroundCount background)")
 
         // ---------------------------------------------------------------------------------
         // Step 4: Generate and persist the report
@@ -164,7 +242,7 @@ class AiAnalysisWorker @AssistedInject constructor(
         // ---------------------------------------------------------------------------------
         // Step 6: Data retention cleanup — delete records older than configured retention
         // ---------------------------------------------------------------------------------
-        val retentionDays = sharedPreferences.getInt(PREF_RETENTION_DAYS, DEFAULT_RETENTION_DAYS)
+        val retentionDays = sharedPreferences.getInt(Prefs.PREF_RETENTION_DAYS, Prefs.DEFAULT_RETENTION_DAYS)
         val retentionMs = retentionDays * 24L * 60L * 60L * 1000L
         val retentionThresholdMs = System.currentTimeMillis() - retentionMs
         try {
@@ -204,6 +282,17 @@ class AiAnalysisWorker @AssistedInject constructor(
             // Non-fatal: profiles will catch up on next run.
         }
 
+        // ---------------------------------------------------------------------------------
+        // Step 8: Release AI models to free native memory
+        // ---------------------------------------------------------------------------------
+        try {
+            aiEngine.releaseModel()
+            llamaEngine.releaseModel()
+            Log.d(TAG, "doWork: models released")
+        } catch (e: Exception) {
+            Log.w(TAG, "doWork: model release failed", e)
+        }
+
         Log.d(TAG, "doWork: analysis pass complete")
         return Result.success()
     }
@@ -220,10 +309,6 @@ class AiAnalysisWorker @AssistedInject constructor(
         /** Analysis window: 24 hours in milliseconds. */
         const val ANALYSIS_WINDOW_MS = 24 * 60 * 60 * 1000L
 
-        /** SharedPreferences key for the user-configured data retention period (days). */
-        const val PREF_RETENTION_DAYS = "data_retention_days"
-
-        /** Default data retention period if the user has not configured one. */
-        const val DEFAULT_RETENTION_DAYS = 30
+        // Pref keys centralised in ai.talkingrock.lithium.data.Prefs
     }
 }

@@ -3,7 +3,7 @@ package ai.talkingrock.lithium.ai
 /**
  * Classification categories for notifications.
  *
- * These six labels are the output space for the AI classifier and the heuristic fallback.
+ * These seven labels are the output space for the AI classifier and the heuristic fallback.
  * The [label] property is the string stored in [ai.talkingrock.lithium.data.model.NotificationRecord.aiClassification].
  */
 enum class NotificationCategory(val label: String) {
@@ -21,6 +21,13 @@ enum class NotificationCategory(val label: String) {
 
     /** OS, platform, or device notifications: battery, storage, updates, connectivity. */
     SYSTEM("system"),
+
+    /**
+     * Ongoing/persistent background updates that are not user-facing alerts:
+     * media playback controls, navigation, weather widgets, fitness trackers, ongoing downloads.
+     * These are definitionally non-interruptive and should not count against the alert total.
+     */
+    BACKGROUND("background"),
 
     /** Social interactions without direct human intent: likes, follows, reactions, comment counts. */
     SOCIAL_SIGNAL("social_signal"),

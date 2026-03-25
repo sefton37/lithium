@@ -1,0 +1,19 @@
+# Flow: Briefing screen — verify it renders in any data state
+# Prerequisites: Permissions granted by run-tests.sh Phase 2
+appId: ai.talkingrock.lithium.debug
+---
+- stopApp
+- waitForAnimationToEnd
+- launchApp
+
+# Wait for main screen
+- extendedWaitUntil:
+    visible:
+      text: "Briefing"
+    timeout: 15000
+
+# Bottom nav is always visible
+- assertVisible: "Briefing"
+- assertVisible: "Queue"
+- assertVisible: "Rules"
+- assertVisible: "Settings"

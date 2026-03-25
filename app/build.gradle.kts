@@ -12,6 +12,9 @@ android {
     namespace = "ai.talkingrock.lithium"
     compileSdk = 35
 
+    // NDK version — required for llama.cpp native build
+    ndkVersion = "27.2.12479018"
+
     defaultConfig {
         applicationId = "ai.talkingrock.lithium"
         minSdk = 29
@@ -22,6 +25,38 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
             useSupportLibrary = true
+        }
+
+        // llama.cpp NDK build — only when -PenableLlama is set and NDK is installed.
+        // Requires: vendor/llama.cpp/ source in app/src/main/cpp/
+        if (project.hasProperty("enableLlama")) {
+            ndk {
+                abiFilters += listOf("arm64-v8a")
+            }
+            externalNativeBuild {
+                cmake {
+                    arguments += listOf(
+                        "-DANDROID_STL=c++_shared",
+                        "-DCMAKE_BUILD_TYPE=Release"
+                    )
+                }
+            }
+        }
+    }
+
+    // llama.cpp CMake build — conditional on -PenableLlama flag
+    if (project.hasProperty("enableLlama")) {
+        externalNativeBuild {
+            cmake {
+                path = file("src/main/cpp/CMakeLists.txt")
+                version = "3.22.1"
+            }
+        }
+    }
+
+    testOptions {
+        unitTests {
+            isReturnDefaultValues = true
         }
     }
 

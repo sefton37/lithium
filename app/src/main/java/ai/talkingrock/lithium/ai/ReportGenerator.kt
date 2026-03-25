@@ -61,17 +61,27 @@ class ReportGenerator @Inject constructor() {
         appStats: List<AppStats>,
         contactVsAlgo: Pair<Int, Int>
     ): String = buildString {
+        val backgroundCount = byCategory[NotificationCategory.BACKGROUND]?.size ?: 0
+        val alertCount = total - backgroundCount
+
         if (total == 0) {
             append("It was a quiet day — no notifications arrived in the past 24 hours.")
             return@buildString
         }
 
-        // Sentence 1: total + breakdown
-        append(buildCountSentence(total, byCategory))
+        // Sentence 1: alert count + category breakdown (BACKGROUND excluded from breakdown)
+        append(buildCountSentence(alertCount, backgroundCount, byCategory))
         append(" ")
 
-        // Sentence 2: top attention-consuming apps (by total volume of engagement_bait/social_signal)
-        val noisyApps = appStats
+        // Sentence 2: top attention-consuming apps — exclude purely-background apps
+        val alertApps = appStats.filter { stats ->
+            val dominantCat = byCategory
+                .filter { (_, records) -> records.any { it.packageName == stats.packageName } }
+                .maxByOrNull { (_, records) -> records.count { it.packageName == stats.packageName } }
+                ?.key
+            dominantCat != NotificationCategory.BACKGROUND
+        }
+        val noisyApps = alertApps
             .filter { it.totalCount >= MIN_NOTABLE_COUNT }
             .take(3)
         if (noisyApps.isNotEmpty()) {
@@ -86,28 +96,46 @@ class ReportGenerator @Inject constructor() {
             append(" ")
         }
 
-        // Sentence 4: notable pattern (only if clearly worth surfacing)
-        val notablePattern = findNotablePattern(appStats)
+        // Sentence 4: notable pattern — exclude background-only apps (high send / zero tap
+        // is expected behaviour for media players, not a meaningful insight)
+        val alertAppStats = appStats.filter { stats ->
+            val dominantCat = byCategory
+                .filter { (_, records) -> records.any { it.packageName == stats.packageName } }
+                .maxByOrNull { (_, records) -> records.count { it.packageName == stats.packageName } }
+                ?.key
+            dominantCat != NotificationCategory.BACKGROUND
+        }
+        val notablePattern = findNotablePattern(alertAppStats)
         if (notablePattern != null) {
             append(notablePattern)
         }
     }.trim()
 
     private fun buildCountSentence(
-        total: Int,
+        alertCount: Int,
+        backgroundCount: Int,
         byCategory: Map<NotificationCategory, List<ai.talkingrock.lithium.data.model.NotificationRecord>>
     ): String {
+        // Breakdown excludes BACKGROUND — those are not meaningful alert categories.
         val breakdown = DISPLAY_ORDER
+            .filter { it != NotificationCategory.BACKGROUND }
             .mapNotNull { cat ->
                 val count = byCategory[cat]?.size ?: 0
                 if (count > 0) "$count ${cat.displayName()}" else null
             }
             .joinToString(", ")
 
-        return if (breakdown.isBlank()) {
-            "You received $total notification${if (total != 1) "s" else ""} in the past 24 hours."
+        val alertWord = if (alertCount != 1) "alerts" else "alert"
+        val base = if (breakdown.isBlank()) {
+            "You received $alertCount $alertWord in the past 24 hours."
         } else {
-            "You received $total notification${if (total != 1) "s" else ""} in the past 24 hours: $breakdown."
+            "You received $alertCount $alertWord in the past 24 hours: $breakdown."
+        }
+
+        return if (backgroundCount > 0) {
+            "$base ($backgroundCount background updates were filtered.)"
+        } else {
+            base
         }
     }
 
@@ -176,19 +204,27 @@ class ReportGenerator @Inject constructor() {
         contactVsAlgo: Pair<Int, Int>,
         text: String
     ): String {
+        val backgroundCount = byCategory[NotificationCategory.BACKGROUND]?.size ?: 0
+        val alertCount = total - backgroundCount
+
         val obj = buildJsonObject {
             put("text", text)
             put("total", total)
+            put("alert_count", alertCount)
+            put("background_count", backgroundCount)
             putJsonObject("by_category") {
+                // Background is a separate top-level field — keep it out of the category breakdown.
                 byCategory.forEach { (cat, records) ->
-                    put(cat.label, records.size)
+                    if (cat != NotificationCategory.BACKGROUND) {
+                        put(cat.label, records.size)
+                    }
                 }
             }
             putJsonObject("contact_vs_algorithmic") {
                 put("contact", contactVsAlgo.first)
                 put("algorithmic", contactVsAlgo.second)
             }
-            // Top 5 apps by volume
+            // Top 5 apps by volume (all apps, including background, for full data fidelity)
             put("top_apps", kotlinx.serialization.json.buildJsonArray {
                 appStats.take(5).forEach { stats ->
                     add(buildJsonObject {
@@ -215,6 +251,7 @@ class ReportGenerator @Inject constructor() {
         NotificationCategory.PROMOTIONAL     -> "promotional"
         NotificationCategory.TRANSACTIONAL   -> "transactional"
         NotificationCategory.SYSTEM          -> "system"
+        NotificationCategory.BACKGROUND      -> "background"
         NotificationCategory.SOCIAL_SIGNAL   -> "social signal"
         NotificationCategory.UNKNOWN         -> "uncategorised"
     }
@@ -241,6 +278,7 @@ class ReportGenerator @Inject constructor() {
             NotificationCategory.PROMOTIONAL,
             NotificationCategory.TRANSACTIONAL,
             NotificationCategory.SYSTEM,
+            NotificationCategory.BACKGROUND,
             NotificationCategory.UNKNOWN
         )
     }
