@@ -8,6 +8,8 @@ import ai.talkingrock.lithium.data.model.SessionRecord
 import ai.talkingrock.lithium.data.model.Rule
 import ai.talkingrock.lithium.data.model.Report
 import ai.talkingrock.lithium.data.model.Suggestion
+import ai.talkingrock.lithium.data.model.AppBattleJudgment
+import ai.talkingrock.lithium.data.model.AppRanking
 import ai.talkingrock.lithium.data.model.QueuedNotification
 import ai.talkingrock.lithium.data.model.TrainingJudgment
 
@@ -40,9 +42,11 @@ import ai.talkingrock.lithium.data.model.TrainingJudgment
         Suggestion::class,
         QueuedNotification::class,
         AppBehaviorProfile::class,
-        TrainingJudgment::class
+        TrainingJudgment::class,
+        AppRanking::class,
+        AppBattleJudgment::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = true
 )
 abstract class LithiumDatabase : RoomDatabase() {
@@ -54,4 +58,6 @@ abstract class LithiumDatabase : RoomDatabase() {
     abstract fun queueDao(): QueueDao
     abstract fun behaviorProfileDao(): AppBehaviorProfileDao
     abstract fun trainingJudgmentDao(): TrainingJudgmentDao
+    abstract fun appRankingDao(): AppRankingDao
+    abstract fun appBattleJudgmentDao(): AppBattleJudgmentDao
 }

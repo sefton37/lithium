@@ -56,6 +56,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import android.content.pm.PackageManager
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.graphics.drawable.toBitmap
 import ai.talkingrock.lithium.ai.AppNames
 import ai.talkingrock.lithium.data.model.NotificationRecord
 import kotlinx.coroutines.delay
@@ -98,9 +103,8 @@ fun TrainingScreen(
             when {
                 state.isLoading -> LoadingState()
                 state.exhausted -> ExhaustedState(count = judgedCount, quest = activeQuest)
-                state.left != null && state.right != null -> PairContent(
-                    left = state.left!!,
-                    right = state.right!!,
+                state.challenge != null -> ChallengeContent(
+                    challenge = state.challenge!!,
                     battle = state.lastBattle,
                     onLeft = { viewModel.submit("left") },
                     onRight = { viewModel.submit("right") },
@@ -283,15 +287,27 @@ private fun ExhaustedState(count: Int, quest: Quest) {
 }
 
 @Composable
-private fun PairContent(
-    left: NotificationRecord,
-    right: NotificationRecord,
+private fun ChallengeContent(
+    challenge: Challenge,
     battle: BattleOutcome?,
     onLeft: () -> Unit,
     onRight: () -> Unit,
     onTie: () -> Unit,
     onSkip: () -> Unit
 ) {
+    val leftState = when (battle) {
+        BattleOutcome.LEFT_WINS -> CardBattleState.WINNING
+        BattleOutcome.RIGHT_WINS -> CardBattleState.LOSING
+        BattleOutcome.TIE -> CardBattleState.TIED
+        else -> CardBattleState.NEUTRAL
+    }
+    val rightState = when (battle) {
+        BattleOutcome.RIGHT_WINS -> CardBattleState.WINNING
+        BattleOutcome.LEFT_WINS -> CardBattleState.LOSING
+        BattleOutcome.TIE -> CardBattleState.TIED
+        else -> CardBattleState.NEUTRAL
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -299,57 +315,166 @@ private fun PairContent(
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        BattleCard(
-            label = "A",
-            record = left,
-            state = when (battle) {
-                BattleOutcome.LEFT_WINS -> CardBattleState.WINNING
-                BattleOutcome.RIGHT_WINS -> CardBattleState.LOSING
-                BattleOutcome.TIE -> CardBattleState.TIED
-                else -> CardBattleState.NEUTRAL
+        when (challenge) {
+            is Challenge.NotificationPair -> {
+                ChallengeBanner(
+                    title = "Which notification matters more?",
+                    subtitle = "Pattern-level signal — teaches Lithium across similar ones."
+                )
+                BattleCard(label = "A", record = challenge.left, state = leftState)
+                Button(onClick = onLeft, enabled = battle == null,
+                    modifier = Modifier.fillMaxWidth().height(48.dp)) { Text("A is more important") }
+                BattleCard(label = "B", record = challenge.right, state = rightState)
+                Button(onClick = onRight, enabled = battle == null,
+                    modifier = Modifier.fillMaxWidth().height(48.dp)) { Text("B is more important") }
             }
-        )
-        Button(
-            onClick = onLeft,
-            enabled = battle == null,
-            modifier = Modifier.fillMaxWidth().height(48.dp)
-        ) { Text("A is more important") }
-
-        BattleCard(
-            label = "B",
-            record = right,
-            state = when (battle) {
-                BattleOutcome.RIGHT_WINS -> CardBattleState.WINNING
-                BattleOutcome.LEFT_WINS -> CardBattleState.LOSING
-                BattleOutcome.TIE -> CardBattleState.TIED
-                else -> CardBattleState.NEUTRAL
+            is Challenge.AppBattle -> {
+                ChallengeBanner(
+                    title = "App battle — which app matters more?",
+                    subtitle = "Sets a base priority that affects every notification from this app."
+                )
+                AppBattleCard(label = "A", packageName = challenge.leftPackage,
+                    elo = challenge.leftElo, state = leftState)
+                Button(onClick = onLeft, enabled = battle == null,
+                    modifier = Modifier.fillMaxWidth().height(48.dp)) { Text("A matters more") }
+                AppBattleCard(label = "B", packageName = challenge.rightPackage,
+                    elo = challenge.rightElo, state = rightState)
+                Button(onClick = onRight, enabled = battle == null,
+                    modifier = Modifier.fillMaxWidth().height(48.dp)) { Text("B matters more") }
             }
-        )
-        Button(
-            onClick = onRight,
-            enabled = battle == null,
-            modifier = Modifier.fillMaxWidth().height(48.dp)
-        ) { Text("B is more important") }
+        }
 
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            OutlinedButton(
-                onClick = onTie,
-                enabled = battle == null,
-                modifier = Modifier.weight(1f).height(48.dp)
-            ) { Text("Tie") }
-            TextButton(
-                onClick = onSkip,
-                enabled = battle == null,
+            OutlinedButton(onClick = onTie, enabled = battle == null,
+                modifier = Modifier.weight(1f).height(48.dp)) { Text("Tie") }
+            TextButton(onClick = onSkip, enabled = battle == null,
                 modifier = Modifier.weight(1f).height(48.dp),
                 colors = ButtonDefaults.textButtonColors(
                     contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            ) { Text("Skip") }
+                )) { Text("Skip") }
         }
         Spacer(Modifier.height(16.dp))
+    }
+}
+
+@Composable
+private fun ChallengeBanner(title: String, subtitle: String) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        Text(
+            title,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+        Text(
+            subtitle,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+/**
+ * Card for an app-vs-app judgment. Renders the app's launcher icon (via
+ * PackageManager.getApplicationIcon) alongside its friendly name and
+ * current Elo score. Same battle animation semantics as notification cards.
+ */
+@Composable
+private fun AppBattleCard(
+    label: String,
+    packageName: String,
+    elo: Int,
+    state: CardBattleState
+) {
+    val context = LocalContext.current
+    val icon = remember(packageName) {
+        try {
+            context.packageManager.getApplicationIcon(packageName)
+        } catch (_: PackageManager.NameNotFoundException) { null }
+    }
+    val iconBitmap = remember(icon) {
+        icon?.toBitmap(width = 96, height = 96)?.asImageBitmap()
+    }
+    val scope = rememberCoroutineScope()
+    val scale = remember { Animatable(1f) }
+    val alpha = remember { Animatable(1f) }
+    LaunchedEffect(state, packageName) {
+        when (state) {
+            CardBattleState.WINNING -> {
+                scale.snapTo(1f); alpha.snapTo(1f)
+                scope.launch { scale.animateTo(1.08f, tween(180)) }
+            }
+            CardBattleState.LOSING -> {
+                scope.launch { scale.animateTo(0.6f, tween(400)) }
+                scope.launch { alpha.animateTo(0f, tween(500)) }
+            }
+            CardBattleState.TIED -> {
+                scope.launch { scale.animateTo(0.95f, tween(150)) }
+                scope.launch { alpha.animateTo(0.8f, tween(150)) }
+            }
+            CardBattleState.NEUTRAL -> { scale.snapTo(1f); alpha.snapTo(1f) }
+        }
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .graphicsLayer {
+                scaleX = scale.value
+                scaleY = scale.value
+                this.alpha = alpha.value
+            },
+        colors = CardDefaults.cardColors(
+            containerColor = when (state) {
+                CardBattleState.WINNING -> MaterialTheme.colorScheme.primaryContainer
+                else -> MaterialTheme.colorScheme.surfaceVariant
+            }
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            if (iconBitmap != null) {
+                Image(
+                    bitmap = iconBitmap,
+                    contentDescription = packageName,
+                    modifier = Modifier.size(56.dp)
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(MaterialTheme.colorScheme.surface)
+                )
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "$label · ${AppNames.friendlyName(packageName)}",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = packageName,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = "Elo: $elo",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
     }
 }
 

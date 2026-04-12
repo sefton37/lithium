@@ -3,9 +3,13 @@ package ai.talkingrock.lithium.ui.training
 import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import ai.talkingrock.lithium.data.db.AppBattleJudgmentDao
+import ai.talkingrock.lithium.data.db.AppRankingDao
 import ai.talkingrock.lithium.data.db.NotificationDao
 import ai.talkingrock.lithium.data.db.PatternStat
 import ai.talkingrock.lithium.data.db.TrainingJudgmentDao
+import ai.talkingrock.lithium.data.model.AppBattleJudgment
+import ai.talkingrock.lithium.data.model.AppRanking
 import ai.talkingrock.lithium.data.model.NotificationRecord
 import ai.talkingrock.lithium.data.model.TrainingJudgment
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -24,9 +28,26 @@ import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 import javax.inject.Inject
 
+/**
+ * One round on the Training tab. Either a notification pair comparison or
+ * an app-vs-app battle. The UI switches renderers based on [challenge].
+ */
+sealed class Challenge {
+    data class NotificationPair(
+        val left: NotificationRecord,
+        val right: NotificationRecord
+    ) : Challenge()
+
+    data class AppBattle(
+        val leftPackage: String,
+        val leftElo: Int,
+        val rightPackage: String,
+        val rightElo: Int
+    ) : Challenge()
+}
+
 data class TrainingUiState(
-    val left: NotificationRecord? = null,
-    val right: NotificationRecord? = null,
+    val challenge: Challenge? = null,
     val isLoading: Boolean = true,
     val exhausted: Boolean = false,
     val setPosition: Int = 0,
@@ -46,6 +67,8 @@ sealed class XpEvent {
 class TrainingViewModel @Inject constructor(
     private val notificationDao: NotificationDao,
     private val judgmentDao: TrainingJudgmentDao,
+    private val appRankingDao: AppRankingDao,
+    private val appBattleDao: AppBattleJudgmentDao,
     private val sharedPreferences: SharedPreferences
 ) : ViewModel() {
 
@@ -115,63 +138,17 @@ class TrainingViewModel @Inject constructor(
 
     fun submit(choice: String) {
         val state = _uiState.value
-        val left = state.left ?: return
-        val right = state.right ?: return
-        val quest = _activeQuest.value
-
+        val challenge = state.challenge ?: return
         viewModelScope.launch {
-            val stats = patternStats.value
-            val leftKey = patternKey(left)
-            val rightKey = patternKey(right)
-            val counts = stats.associate { it.pattern to it.judged }
-            val xp = computeXpForJudgment(choice, leftKey, rightKey, counts)
+            val xp = when (challenge) {
+                is Challenge.NotificationPair -> submitNotificationPair(challenge, choice)
+                is Challenge.AppBattle -> submitAppBattle(challenge, choice)
+            }
             val isRealJudgment = choice != "skip"
-
             val willCompleteSet = isRealJudgment && (setCompletedInThisRun + 1) == SET_SIZE
             val pendingSetXp = if (willCompleteSet) setXpAccumulator + xp else 0
             val bonus = if (willCompleteSet) (pendingSetXp * SET_BONUS_MULTIPLIER).roundToInt() else 0
-
-            val questXpBefore = questXp.value[quest.id] ?: 0
-
-            // Detect newly-mapped patterns: a pattern becomes mapped when this
-            // judgment pushes its judged count to exactly MIN_JUDGMENTS_TO_MAP.
-            val newlyMapped = listOf(left, right).any { row ->
-                val key = patternKey(row)
-                val was = counts[key] ?: 0
-                was == MIN_JUDGMENTS_TO_MAP - 1 && isRealJudgment
-            }
-
-            judgmentDao.insert(
-                TrainingJudgment(
-                    leftNotificationId = left.id,
-                    rightNotificationId = right.id,
-                    choice = choice,
-                    leftTier = left.tier,
-                    rightTier = right.tier,
-                    leftTierReason = left.tierReason,
-                    rightTierReason = right.tierReason,
-                    leftAiClassification = left.aiClassification,
-                    rightAiClassification = right.aiClassification,
-                    leftConfidence = left.aiConfidence,
-                    rightConfidence = right.aiConfidence,
-                    createdAtMs = System.currentTimeMillis(),
-                    xpAwarded = xp,
-                    setComplete = willCompleteSet,
-                    setBonusXp = bonus,
-                    questId = quest.id
-                )
-            )
-
-            if (xp > 0) _xpEvents.emit(XpEvent.Judgment(xp, newlyMapped))
             if (willCompleteSet) _xpEvents.emit(XpEvent.SetComplete(bonus, pendingSetXp))
-
-            if (quest.goalXp > 0 && quest != Quests.FREE_PLAY) {
-                val questXpAfter = questXpBefore + xp + bonus
-                if (questXpBefore < quest.goalXp && questXpAfter >= quest.goalXp) {
-                    _xpEvents.emit(XpEvent.QuestComplete(quest, questXpAfter))
-                }
-            }
-
             if (isRealJudgment) {
                 setXpAccumulator += xp
                 setCompletedInThisRun += 1
@@ -180,7 +157,6 @@ class TrainingViewModel @Inject constructor(
                     setCompletedInThisRun = 0
                 }
             }
-
             _uiState.value = _uiState.value.copy(
                 setPosition = setCompletedInThisRun,
                 lastBattle = when (choice) {
@@ -190,62 +166,199 @@ class TrainingViewModel @Inject constructor(
                     else -> BattleOutcome.SKIPPED
                 }
             )
-
             kotlinx.coroutines.delay(BATTLE_DURATION_MS)
             _uiState.value = _uiState.value.copy(lastBattle = null)
             loadNextPair()
         }
     }
 
+    private suspend fun submitNotificationPair(
+        c: Challenge.NotificationPair,
+        choice: String
+    ): Int {
+        val quest = _activeQuest.value
+        val stats = patternStats.value
+        val leftKey = patternKey(c.left)
+        val rightKey = patternKey(c.right)
+        val counts = stats.associate { it.pattern to it.judged }
+        val xp = computeXpForJudgment(choice, leftKey, rightKey, counts)
+        val isReal = choice != "skip"
+        val newlyMapped = isReal && listOf(c.left, c.right).any {
+            val was = counts[patternKey(it)] ?: 0
+            was == MIN_JUDGMENTS_TO_MAP - 1
+        }
+        val questXpBefore = questXp.value[quest.id] ?: 0
+
+        judgmentDao.insert(
+            TrainingJudgment(
+                leftNotificationId = c.left.id,
+                rightNotificationId = c.right.id,
+                choice = choice,
+                leftTier = c.left.tier,
+                rightTier = c.right.tier,
+                leftTierReason = c.left.tierReason,
+                rightTierReason = c.right.tierReason,
+                leftAiClassification = c.left.aiClassification,
+                rightAiClassification = c.right.aiClassification,
+                leftConfidence = c.left.aiConfidence,
+                rightConfidence = c.right.aiConfidence,
+                createdAtMs = System.currentTimeMillis(),
+                xpAwarded = xp,
+                setComplete = false,
+                setBonusXp = 0,
+                questId = quest.id
+            )
+        )
+        if (xp > 0) _xpEvents.emit(XpEvent.Judgment(xp, newlyMapped))
+
+        if (quest.goalXp > 0 && quest != Quests.FREE_PLAY) {
+            val after = questXpBefore + xp
+            if (questXpBefore < quest.goalXp && after >= quest.goalXp) {
+                _xpEvents.emit(XpEvent.QuestComplete(quest, after))
+            }
+        }
+        return xp
+    }
+
+    private suspend fun submitAppBattle(c: Challenge.AppBattle, choice: String): Int {
+        val now = System.currentTimeMillis()
+        val actual = when (choice) {
+            "left" -> 1.0
+            "right" -> 0.0
+            "tie" -> 0.5
+            else -> -1.0  // skip — no Elo update
+        }
+        val (leftAfter, rightAfter) = if (actual < 0) c.leftElo to c.rightElo
+        else updateElo(c.leftElo, c.rightElo, actual)
+
+        // Persist the per-judgment audit row first.
+        val xp = if (choice == "skip") 0 else APP_BATTLE_XP
+        appBattleDao.insert(
+            AppBattleJudgment(
+                leftPackage = c.leftPackage,
+                rightPackage = c.rightPackage,
+                choice = choice,
+                leftEloBefore = c.leftElo,
+                rightEloBefore = c.rightElo,
+                leftEloAfter = leftAfter,
+                rightEloAfter = rightAfter,
+                xpAwarded = xp,
+                questId = _activeQuest.value.id,
+                createdAtMs = now
+            )
+        )
+
+        // Only update rankings for non-skip judgments.
+        if (actual >= 0) {
+            val leftPrev = appRankingDao.get(c.leftPackage)
+                ?: AppRanking(packageName = c.leftPackage, updatedAtMs = now)
+            val rightPrev = appRankingDao.get(c.rightPackage)
+                ?: AppRanking(packageName = c.rightPackage, updatedAtMs = now)
+            appRankingDao.upsert(
+                leftPrev.copy(
+                    eloScore = leftAfter,
+                    wins = leftPrev.wins + (if (choice == "left") 1 else 0),
+                    losses = leftPrev.losses + (if (choice == "right") 1 else 0),
+                    ties = leftPrev.ties + (if (choice == "tie") 1 else 0),
+                    judgments = leftPrev.judgments + 1,
+                    updatedAtMs = now
+                )
+            )
+            appRankingDao.upsert(
+                rightPrev.copy(
+                    eloScore = rightAfter,
+                    wins = rightPrev.wins + (if (choice == "right") 1 else 0),
+                    losses = rightPrev.losses + (if (choice == "left") 1 else 0),
+                    ties = rightPrev.ties + (if (choice == "tie") 1 else 0),
+                    judgments = rightPrev.judgments + 1,
+                    updatedAtMs = now
+                )
+            )
+        }
+        if (xp > 0) _xpEvents.emit(XpEvent.Judgment(xp, false))
+        return xp
+    }
+
     /**
-     * Active-learning pair selection:
-     *   1. Fetch a wide pool of ambiguous candidates (respecting the active quest).
-     *   2. Pick the row whose pattern is least-judged.
-     *   3. Pair it with another row from a DIFFERENT unmapped pattern when possible,
-     *      so each judgment extends coverage rather than deepening it.
-     *   4. If no cross-pattern match exists in the pool, fall back to a
-     *      different-package row; finally, whatever's second-best.
+     * Picks the next challenge — either a notification pair or an app
+     * battle. Mix is weighted: biased toward app battles when many apps
+     * have no ranking yet, tapering to 25% once the Elo pool is seeded.
+     * Free Play allows both; themed quests force notification pairs
+     * (app battles bypass package filters by design).
      */
     private fun loadNextPair() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true)
-            val excluded = judgmentDao.getJudgedNotificationIds()
             val quest = _activeQuest.value
-            val raw = if (quest.onlyUnclassified) {
-                notificationDao.getUnclassifiedCandidates(
-                    limit = CANDIDATE_POOL_SIZE,
-                    excludeIds = if (excluded.isEmpty()) listOf(-1L) else excluded
+            val tryAppBattle = quest == Quests.FREE_PLAY && shouldDoAppBattle()
+            val challenge: Challenge? = if (tryAppBattle) {
+                pickAppBattleChallenge() ?: pickNotificationChallenge(quest)
+            } else {
+                pickNotificationChallenge(quest) ?: pickAppBattleChallenge()
+            }
+            if (challenge == null) {
+                _uiState.value = _uiState.value.copy(
+                    challenge = null, isLoading = false, exhausted = true
                 )
             } else {
-                notificationDao.getAmbiguousCandidates(
-                    limit = CANDIDATE_POOL_SIZE,
-                    excludeIds = if (excluded.isEmpty()) listOf(-1L) else excluded
-                )
-            }
-            val questFiltered = if (quest.packagePrefixes.isEmpty()) raw
-            else raw.filter { row -> quest.packagePrefixes.any { row.packageName.startsWith(it) } }
-
-            if (questFiltered.size < 2) {
                 _uiState.value = _uiState.value.copy(
-                    left = null, right = null,
-                    isLoading = false, exhausted = true
+                    challenge = challenge, isLoading = false, exhausted = false
                 )
-                return@launch
             }
+        }
+    }
 
-            val counts = patternStats.first().associate { it.pattern to it.judged }
-            val sorted = questFiltered.sortedBy { counts[patternKey(it)] ?: 0 }
-            val first = sorted.first()
-            val firstPattern = patternKey(first)
-            val second = sorted.drop(1).firstOrNull { patternKey(it) != firstPattern }
-                ?: sorted.drop(1).firstOrNull { it.packageName != first.packageName }
-                ?: sorted[1]
+    private suspend fun shouldDoAppBattle(): Boolean {
+        val total = appRankingDao.count()
+        val eligible = appRankingDao.getEligiblePackages().size
+        if (eligible < 2) return false
+        // Early game: lots of apps have no Elo. Bias toward app battles.
+        // Late game: ranks settled. Let notification pairs dominate.
+        val weight = if (total < eligible / 2) 0.5 else 0.25
+        return kotlin.random.Random.nextDouble() < weight
+    }
 
-            _uiState.value = _uiState.value.copy(
-                left = first, right = second,
-                isLoading = false, exhausted = false
+    private suspend fun pickAppBattleChallenge(): Challenge.AppBattle? {
+        val eligible = appRankingDao.getEligiblePackages()
+        if (eligible.size < 2) return null
+        val existingMap = appRankingDao.getAll().associateBy { it.packageName }
+        val nowMs = System.currentTimeMillis()
+        val merged: List<AppRanking> = eligible.map { pkg ->
+            existingMap[pkg] ?: AppRanking(packageName = pkg, updatedAtMs = nowMs)
+        }
+        val pair = pickAppBattlePair(merged) ?: return null
+        val leftRank = merged.first { it.packageName == pair.first }
+        val rightRank = merged.first { it.packageName == pair.second }
+        return Challenge.AppBattle(
+            leftPackage = leftRank.packageName, leftElo = leftRank.eloScore,
+            rightPackage = rightRank.packageName, rightElo = rightRank.eloScore
+        )
+    }
+
+    private suspend fun pickNotificationChallenge(quest: Quest): Challenge.NotificationPair? {
+        val excluded = judgmentDao.getJudgedNotificationIds()
+        val raw = if (quest.onlyUnclassified) {
+            notificationDao.getUnclassifiedCandidates(
+                limit = CANDIDATE_POOL_SIZE,
+                excludeIds = if (excluded.isEmpty()) listOf(-1L) else excluded
+            )
+        } else {
+            notificationDao.getAmbiguousCandidates(
+                limit = CANDIDATE_POOL_SIZE,
+                excludeIds = if (excluded.isEmpty()) listOf(-1L) else excluded
             )
         }
+        val questFiltered = if (quest.packagePrefixes.isEmpty()) raw
+        else raw.filter { row -> quest.packagePrefixes.any { row.packageName.startsWith(it) } }
+        if (questFiltered.size < 2) return null
+        val counts = patternStats.first().associate { it.pattern to it.judged }
+        val sorted = questFiltered.sortedBy { counts[patternKey(it)] ?: 0 }
+        val first = sorted.first()
+        val firstPattern = patternKey(first)
+        val second = sorted.drop(1).firstOrNull { patternKey(it) != firstPattern }
+            ?: sorted.drop(1).firstOrNull { it.packageName != first.packageName }
+            ?: sorted[1]
+        return Challenge.NotificationPair(first, second)
     }
 
     companion object {

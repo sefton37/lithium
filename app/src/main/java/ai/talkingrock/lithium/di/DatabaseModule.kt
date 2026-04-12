@@ -21,6 +21,8 @@ import ai.talkingrock.lithium.data.db.ReportDao
 import ai.talkingrock.lithium.data.db.SuggestionDao
 import ai.talkingrock.lithium.data.db.AppBehaviorProfileDao
 import ai.talkingrock.lithium.data.db.QueueDao
+import ai.talkingrock.lithium.data.db.AppBattleJudgmentDao
+import ai.talkingrock.lithium.data.db.AppRankingDao
 import ai.talkingrock.lithium.data.db.TrainingJudgmentDao
 import java.security.KeyStore
 import javax.crypto.Cipher
@@ -159,6 +161,47 @@ object DatabaseModule {
         }
     }
 
+    /**
+     * Migration 7 → 8 adds app-vs-app ranking tables driven by the Training
+     * tab's app-battle mode. [app_rankings] holds the current Elo score per
+     * package; [app_battle_judgments] is the audit trail of individual
+     * judgments with before/after scores.
+     */
+    val MIGRATION_7_8 = object : Migration(7, 8) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS app_rankings (
+                    package_name TEXT PRIMARY KEY NOT NULL,
+                    elo_score INTEGER NOT NULL DEFAULT 1200,
+                    wins INTEGER NOT NULL DEFAULT 0,
+                    losses INTEGER NOT NULL DEFAULT 0,
+                    ties INTEGER NOT NULL DEFAULT 0,
+                    judgments INTEGER NOT NULL DEFAULT 0,
+                    updated_at_ms INTEGER NOT NULL
+                )
+                """.trimIndent()
+            )
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS app_battle_judgments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    left_package TEXT NOT NULL,
+                    right_package TEXT NOT NULL,
+                    choice TEXT NOT NULL,
+                    left_elo_before INTEGER NOT NULL,
+                    right_elo_before INTEGER NOT NULL,
+                    left_elo_after INTEGER NOT NULL,
+                    right_elo_after INTEGER NOT NULL,
+                    xp_awarded INTEGER NOT NULL,
+                    quest_id TEXT NOT NULL DEFAULT 'free_play',
+                    created_at_ms INTEGER NOT NULL
+                )
+                """.trimIndent()
+            )
+        }
+    }
+
     val MIGRATION_5_6 = object : Migration(5, 6) {
         override fun migrate(db: SupportSQLiteDatabase) {
             db.execSQL("ALTER TABLE training_judgments ADD COLUMN xp_awarded INTEGER NOT NULL DEFAULT 0")
@@ -278,7 +321,7 @@ object DatabaseModule {
             .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
             .addMigrations(
                 MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4,
-                MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7
+                MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8
             )
             // No fallback destructive migration — force explicit migrations.
             // If a migration is missing, the app crashes loudly rather than
@@ -311,4 +354,11 @@ object DatabaseModule {
     @Provides
     fun provideTrainingJudgmentDao(db: LithiumDatabase): TrainingJudgmentDao =
         db.trainingJudgmentDao()
+
+    @Provides
+    fun provideAppRankingDao(db: LithiumDatabase): AppRankingDao = db.appRankingDao()
+
+    @Provides
+    fun provideAppBattleJudgmentDao(db: LithiumDatabase): AppBattleJudgmentDao =
+        db.appBattleJudgmentDao()
 }
