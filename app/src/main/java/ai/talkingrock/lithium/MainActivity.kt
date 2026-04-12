@@ -11,6 +11,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -168,6 +169,10 @@ private fun LithiumNavHost(startDestination: String = Screen.Setup.route) {
                 SettingsScreen()
             }
 
+            composable(Screen.Training.route) {
+                ai.talkingrock.lithium.ui.training.TrainingScreen()
+            }
+
             // Debug log — only reachable in debug builds.
             if (BuildConfig.DEBUG) {
                 composable(Screen.DebugLog.route) {
@@ -233,6 +238,7 @@ private data class MainTab(
             MainTab(Screen.Briefing.route, "Briefing",  Icons.Filled.Home),
             MainTab(Screen.Queue.route,    "Queue",     Icons.AutoMirrored.Filled.List),
             MainTab(Screen.Rules.route,    "Rules",     Icons.Filled.Star),
+            MainTab(Screen.Training.route, "Train",     Icons.Filled.Favorite),
             MainTab(Screen.Settings.route, "Settings",  Icons.Filled.Settings)
         )
 
@@ -258,5 +264,6 @@ sealed class Screen(val route: String) {
     object Rules    : Screen("rules")
     object AddRule  : Screen("add_rule")
     object Settings : Screen("settings")
+    object Training : Screen("training")
     object DebugLog : Screen("debug_log")
 }

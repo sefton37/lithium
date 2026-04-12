@@ -9,6 +9,7 @@ import ai.talkingrock.lithium.data.model.Rule
 import ai.talkingrock.lithium.data.model.Report
 import ai.talkingrock.lithium.data.model.Suggestion
 import ai.talkingrock.lithium.data.model.QueuedNotification
+import ai.talkingrock.lithium.data.model.TrainingJudgment
 
 /**
  * Room database — the single source of truth for all persisted app data.
@@ -38,9 +39,10 @@ import ai.talkingrock.lithium.data.model.QueuedNotification
         Report::class,
         Suggestion::class,
         QueuedNotification::class,
-        AppBehaviorProfile::class
+        AppBehaviorProfile::class,
+        TrainingJudgment::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = true
 )
 abstract class LithiumDatabase : RoomDatabase() {
@@ -51,4 +53,5 @@ abstract class LithiumDatabase : RoomDatabase() {
     abstract fun suggestionDao(): SuggestionDao
     abstract fun queueDao(): QueueDao
     abstract fun behaviorProfileDao(): AppBehaviorProfileDao
+    abstract fun trainingJudgmentDao(): TrainingJudgmentDao
 }

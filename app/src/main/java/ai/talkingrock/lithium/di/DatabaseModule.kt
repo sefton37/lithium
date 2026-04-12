@@ -21,6 +21,7 @@ import ai.talkingrock.lithium.data.db.ReportDao
 import ai.talkingrock.lithium.data.db.SuggestionDao
 import ai.talkingrock.lithium.data.db.AppBehaviorProfileDao
 import ai.talkingrock.lithium.data.db.QueueDao
+import ai.talkingrock.lithium.data.db.TrainingJudgmentDao
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -135,6 +136,37 @@ object DatabaseModule {
             db.execSQL("ALTER TABLE notifications ADD COLUMN tier_reason TEXT")
         }
     }
+
+    /**
+     * Migration from schema version 4 to version 5 (Training Judgments).
+     *
+     * Adds the training_judgments table used by the Training tab. Each row is a
+     * single user judgment comparing two notifications, with a snapshot of the
+     * tier/classification/confidence of each side at judgment time.
+     */
+    val MIGRATION_4_5 = object : Migration(4, 5) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS training_judgments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    left_notification_id INTEGER NOT NULL,
+                    right_notification_id INTEGER NOT NULL,
+                    choice TEXT NOT NULL,
+                    left_tier INTEGER NOT NULL,
+                    right_tier INTEGER NOT NULL,
+                    left_tier_reason TEXT,
+                    right_tier_reason TEXT,
+                    left_ai_classification TEXT,
+                    right_ai_classification TEXT,
+                    left_confidence REAL,
+                    right_confidence REAL,
+                    created_at_ms INTEGER NOT NULL
+                )
+                """.trimIndent()
+            )
+        }
+    }
     /**
      * Fixed 32-byte plaintext that the Keystore key encrypts to produce the passphrase.
      * This is NOT a secret — the security comes from the Keystore key, not this value.
@@ -221,7 +253,7 @@ object DatabaseModule {
         )
             .openHelperFactory(factory)
             .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
             // No fallback destructive migration — force explicit migrations.
             // If a migration is missing, the app crashes loudly rather than
             // silently wiping user data.
@@ -249,4 +281,8 @@ object DatabaseModule {
     @Provides
     fun provideBehaviorProfileDao(db: LithiumDatabase): AppBehaviorProfileDao =
         db.behaviorProfileDao()
+
+    @Provides
+    fun provideTrainingJudgmentDao(db: LithiumDatabase): TrainingJudgmentDao =
+        db.trainingJudgmentDao()
 }

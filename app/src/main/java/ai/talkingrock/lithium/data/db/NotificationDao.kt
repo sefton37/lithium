@@ -151,6 +151,29 @@ interface NotificationDao {
     suspend fun updateTier(id: Long, tier: Int, reason: String)
 
     /**
+     * Returns notifications that are good candidates for training-pair judgment.
+     *
+     * Ambiguity ranking (lower = more ambiguous, surfaced first):
+     *   - AI-unclassified rows treated as maximum ambiguity (assigned 0.5 boundary)
+     *   - Classified rows ranked by |confidence - 0.5| ascending
+     * tier = 0 (Invisible: media, ongoing) excluded — not useful training signal.
+     * Row IDs in [excludeIds] are omitted (already judged).
+     *
+     * The query returns up to [limit] rows; the caller pairs them with a
+     * diversity policy.
+     */
+    @Query(
+        "SELECT * FROM notifications " +
+        "WHERE tier > 0 AND id NOT IN (:excludeIds) " +
+        "ORDER BY " +
+        "  CASE WHEN ai_classification IS NULL THEN 0.0 " +
+        "       ELSE ABS(ai_confidence - 0.5) END ASC, " +
+        "  RANDOM() " +
+        "LIMIT :limit"
+    )
+    suspend fun getAmbiguousCandidates(limit: Int, excludeIds: List<Long>): List<NotificationRecord>
+
+    /**
      * Per-(package, tier_reason) aggregation for tier ≤ [maxTier], since [sinceMs].
      * Used by SuggestionGenerator to propose suppress/queue rules from the tier
      * classifier's deterministic reason codes (marketing_text, linkedin, etc.)
