@@ -6,6 +6,7 @@ import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.os.PowerManager
 import android.os.Process
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -62,8 +63,13 @@ class SetupViewModel @Inject constructor(
     val uiState: StateFlow<SetupUiState> = combine(
         listenerState.isConnected,
         _polledState
-    ) { notificationGranted, polled ->
-        polled.copy(notificationAccessGranted = notificationGranted)
+    ) { liveConnected, polled ->
+        // ListenerState.isConnected is false at cold start until the service reconnects,
+        // so we OR in the synchronous system-level check (the authoritative source).
+        // This mirrors MainActivity's routing logic and prevents the "needs notification
+        // access" tile from flashing red when access is actually granted.
+        val granted = liveConnected || polled.notificationAccessGranted
+        polled.copy(notificationAccessGranted = granted)
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
@@ -76,10 +82,15 @@ class SetupViewModel @Inject constructor(
     }
 
     private fun pollPermissions(): SetupUiState = SetupUiState(
+        notificationAccessGranted = checkNotificationAccess(),
         batteryOptimizationExempt = checkBatteryOptimization(),
         usageAccessGranted = checkUsageAccess(),
         contactsGranted = checkContactsPermission(),
     )
+
+    private fun checkNotificationAccess(): Boolean =
+        NotificationManagerCompat.getEnabledListenerPackages(context)
+            .contains(context.packageName)
 
     private fun checkBatteryOptimization(): Boolean {
         val powerManager = context.getSystemService(PowerManager::class.java)
