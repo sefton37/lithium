@@ -27,7 +27,12 @@ class ReportGeneratorTest {
     @Before
     fun setUp() {
         SyntheticNotifications.resetIds()
-        generator = ReportGenerator()
+        // AppLabelResolver requires a Context, so mock it for JVM tests.
+        // Return the package name itself as the label — sufficient for report text assertions.
+        val appLabelResolver = mockk<AppLabelResolver> {
+            every { label(any()) } answers { firstArg<String>() }
+        }
+        generator = ReportGenerator(appLabelResolver)
         val aiEngine = mockk<AiEngine> {
             every { isModelLoaded() } returns false
             every { classify(any()) } returns null
