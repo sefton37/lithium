@@ -16,6 +16,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -50,10 +51,28 @@ fun BriefingScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    when {
-        uiState.isLoading -> LoadingState()
-        uiState.report == null -> EmptyState(dataReady = uiState.dataReady)
-        else -> ReportContent(uiState = uiState, viewModel = viewModel)
+    Column(modifier = Modifier.fillMaxSize()) {
+        AnimatedVisibility(visible = uiState.analysisRunning) {
+            AnalysisRunningBanner()
+        }
+        when {
+            uiState.isLoading -> LoadingState()
+            uiState.report == null -> EmptyState(dataReady = uiState.dataReady)
+            else -> ReportContent(uiState = uiState, viewModel = viewModel)
+        }
+    }
+}
+
+@Composable
+private fun AnalysisRunningBanner() {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+        Text(
+            text = "Analyzing your notifications…",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+        )
     }
 }
 

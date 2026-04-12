@@ -1,8 +1,14 @@
 package ai.talkingrock.lithium.ui.briefing
 
+import android.content.Context
 import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
+import ai.talkingrock.lithium.ai.AiAnalysisWorker
+import ai.talkingrock.lithium.ai.WorkScheduler
+import dagger.hilt.android.qualifiers.ApplicationContext
 import ai.talkingrock.lithium.data.Prefs
 import ai.talkingrock.lithium.data.db.TierCount
 import ai.talkingrock.lithium.data.model.Report
@@ -41,7 +47,9 @@ data class BriefingUiState(
     /** True when enough data has been collected for meaningful recommendations. */
     val dataReady: Boolean = false,
     /** Tier counts for the last 24 hours, indexed by tier 0..3. Zeros when no data. */
-    val tierBreakdown24h: Map<Int, Int> = emptyMap()
+    val tierBreakdown24h: Map<Int, Int> = emptyMap(),
+    /** True when an AiAnalysisWorker run is RUNNING or ENQUEUED. */
+    val analysisRunning: Boolean = false
 )
 
 /**
@@ -60,8 +68,22 @@ class BriefingViewModel @Inject constructor(
     private val reportRepository: ReportRepository,
     private val ruleRepository: RuleRepository,
     private val notificationRepository: NotificationRepository,
-    private val sharedPreferences: SharedPreferences
+    private val sharedPreferences: SharedPreferences,
+    @ApplicationContext context: Context
 ) : ViewModel() {
+
+    private val workManager = WorkManager.getInstance(context)
+
+    /** Emits true while either the periodic or manual analysis worker is active. */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val analysisRunningFlow = kotlinx.coroutines.flow.combine(
+        workManager.getWorkInfosForUniqueWorkFlow(AiAnalysisWorker.WORK_NAME),
+        workManager.getWorkInfosForUniqueWorkFlow(WorkScheduler.MANUAL_WORK_NAME)
+    ) { periodic, manual ->
+        (periodic + manual).any {
+            it.state == WorkInfo.State.RUNNING || it.state == WorkInfo.State.ENQUEUED
+        }
+    }
 
     // Ephemeral UI state for comment expansion and drafts — not persisted.
     private val _uiExtras = MutableStateFlow(UiExtras())
@@ -86,6 +108,9 @@ class BriefingViewModel @Inject constructor(
             reportWithSuggestions
                 .combine(_uiExtras) { rs, extras -> Triple(rs.first, rs.second, extras) }
                 .combine(tierBreakdownFlow) { triple, tierCounts ->
+                    Pair(triple, tierCounts)
+                }
+                .combine(analysisRunningFlow) { (triple, tierCounts), running ->
                     BriefingUiState(
                         report = triple.first,
                         suggestions = triple.second,
@@ -93,7 +118,8 @@ class BriefingViewModel @Inject constructor(
                         commentDrafts = triple.third.commentDrafts,
                         expandedCommentId = triple.third.expandedCommentId,
                         dataReady = dataReady,
-                        tierBreakdown24h = tierCounts.associate { it.tier to it.count }
+                        tierBreakdown24h = tierCounts.associate { it.tier to it.count },
+                        analysisRunning = running
                     )
                 }
         }

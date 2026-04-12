@@ -1,11 +1,17 @@
 package ai.talkingrock.lithium.ai
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
 import android.util.Log
+import androidx.core.app.NotificationCompat
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import ai.talkingrock.lithium.MainActivity
 import ai.talkingrock.lithium.data.Prefs
 import ai.talkingrock.lithium.data.db.NotificationDao
 import ai.talkingrock.lithium.data.db.SessionDao
@@ -294,7 +300,60 @@ class AiAnalysisWorker @AssistedInject constructor(
         }
 
         Log.d(TAG, "doWork: analysis pass complete")
+        postCompletionNotification(
+            suggestionCount = linkedSuggestions.size,
+            hasReport = true
+        )
         return Result.success()
+    }
+
+    /**
+     * Posts a low-priority notification announcing that analysis is complete.
+     * Tapping opens [MainActivity] → briefing. The message varies on whether
+     * suggestions were produced so users see immediate signal about the run.
+     */
+    private fun postCompletionNotification(suggestionCount: Int, hasReport: Boolean) {
+        val nm = applicationContext.getSystemService(NotificationManager::class.java)
+        if (nm.getNotificationChannel(CHANNEL_ID) == null) {
+            nm.createNotificationChannel(
+                NotificationChannel(
+                    CHANNEL_ID,
+                    "Lithium Briefing",
+                    NotificationManager.IMPORTANCE_LOW
+                ).apply {
+                    description = "Signals when your daily briefing is ready"
+                }
+            )
+        }
+
+        val title = when {
+            !hasReport -> "Analysis finished"
+            suggestionCount > 0 -> "Your briefing is ready"
+            else -> "Analysis complete"
+        }
+        val body = when {
+            !hasReport -> "No new report this cycle."
+            suggestionCount == 1 -> "1 suggestion to review. Tap to open."
+            suggestionCount > 0 -> "$suggestionCount suggestions to review. Tap to open."
+            else -> "No new suggestions this cycle."
+        }
+
+        val intent = Intent(applicationContext, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val pi = PendingIntent.getActivity(
+            applicationContext, REQUEST_CODE, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val notification = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_menu_info_details)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setContentIntent(pi)
+            .setAutoCancel(true)
+            .build()
+        nm.notify(NOTIFICATION_ID, notification)
     }
 
     companion object {
@@ -308,6 +367,11 @@ class AiAnalysisWorker @AssistedInject constructor(
 
         /** Analysis window: 24 hours in milliseconds. */
         const val ANALYSIS_WINDOW_MS = 24 * 60 * 60 * 1000L
+
+        /** Completion-notification channel and IDs. */
+        private const val CHANNEL_ID = "lithium_briefing"
+        private const val NOTIFICATION_ID = 4001
+        private const val REQUEST_CODE = 4001
 
         // Pref keys centralised in ai.talkingrock.lithium.data.Prefs
     }

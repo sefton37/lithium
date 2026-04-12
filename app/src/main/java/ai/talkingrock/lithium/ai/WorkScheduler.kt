@@ -29,7 +29,7 @@ object WorkScheduler {
     private const val TAG = "WorkScheduler"
 
     /** One-shot work name for manual "Run Now" triggers. */
-    private const val MANUAL_WORK_NAME = "lithium_ai_analysis_manual"
+    const val MANUAL_WORK_NAME = "lithium_ai_analysis_manual"
 
     /**
      * Enqueues or verifies the [AiAnalysisWorker] periodic request.
