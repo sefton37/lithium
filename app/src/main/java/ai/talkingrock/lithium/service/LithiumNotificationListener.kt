@@ -150,6 +150,7 @@ class LithiumNotificationListener : NotificationListenerService() {
             text = text,
             isOngoing = sbn.isOngoing,
             category = sbn.notification.category,
+            isFromContact = isFromContact,
         )
         return NotificationRecord(
             packageName = sbn.packageName,

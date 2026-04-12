@@ -9,9 +9,10 @@ package ai.talkingrock.lithium.classification
  *   2 — Worth seeing: surface in hourly check (Gmail, calendar, financial, GitHub)  [DEFAULT]
  *   3 — Interrupt: immediate attention (SMS, calls, 2FA, security alerts)
  *
- * CRM lookups (checking sender against whitelist) are stubbed — see Phase 2.
- * When CRM is wired in, SMS from family and email from whitelist contacts will
- * be elevated to Tier 3 dynamically.
+ * Contact whitelist: the device's native contact list is the trust source.
+ * SMS/calls/Gmail from a known contact → Tier 3 (interrupt). Same channels from
+ * an unknown sender → Tier 2 (worth seeing). Security/2FA codes always → Tier 3
+ * regardless of sender (checked before channel rules).
  */
 object TierClassifier {
 
@@ -21,6 +22,7 @@ object TierClassifier {
         text: String?,
         isOngoing: Boolean,
         category: String?,
+        isFromContact: Boolean = false,
     ): Pair<Int, String> {
 
         val fullText = listOfNotNull(title, text).joinToString(" ").lowercase()
@@ -37,16 +39,18 @@ object TierClassifier {
             return 0 to "system_status"
         }
 
+        // Security / 2FA codes are always Tier 3 — checked before channel rules
+        // so an OTP from a short-code (unknown sender) isn't demoted.
+        if (containsSecurityKeyword(fullText)) {
+            return 3 to "security_2fa"
+        }
+
         if (category == CATEGORY_CALL || packageName == "com.google.android.dialer") {
-            return 3 to "call"
+            return if (isFromContact) 3 to "call_known" else 2 to "call_unknown"
         }
 
         if (packageName in MESSAGING_PACKAGES) {
-            return 3 to "sms"
-        }
-
-        if (containsSecurityKeyword(fullText)) {
-            return 3 to "security_2fa"
+            return if (isFromContact) 3 to "sms_known" else 2 to "sms_unknown"
         }
 
         if (category == CATEGORY_TRANSPORT) {
@@ -62,7 +66,7 @@ object TierClassifier {
         }
 
         if (packageName == "com.google.android.gm") {
-            return 2 to "gmail"
+            return if (isFromContact) 3 to "gmail_known" else 2 to "gmail"
         }
 
         if (isSchoolPackage(packageName)) {
