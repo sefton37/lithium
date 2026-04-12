@@ -1,5 +1,6 @@
 package ai.talkingrock.lithium.ai
 
+import ai.talkingrock.lithium.data.db.TierReasonStat
 import ai.talkingrock.lithium.data.model.AppBehaviorProfile
 import ai.talkingrock.lithium.data.model.NotificationRecord
 import ai.talkingrock.lithium.data.model.RuleCondition
@@ -163,6 +164,73 @@ class SuggestionGenerator @Inject constructor() {
         return suggestions.take(MAX_SUGGESTIONS_PER_REPORT)
     }
 
+    /**
+     * Generates suggestions directly from tier-classifier reason codes. This path
+     * is independent of the ML category classifier — it operates on the
+     * deterministic signals from [ai.talkingrock.lithium.classification.TierClassifier]
+     * over a wider (typically lifetime/30-day) window.
+     *
+     * Suggests `suppress` when a (package, tier_reason) pair has high volume and a
+     * very low tap rate. The tier_reason carries the rationale text directly:
+     * "linkedin" → engagement nudges, "amazon_shopping" → promos, etc.
+     *
+     * Suggestions are deduplicated per-package — if a package already appears in
+     * [existingSuggestions] (from the ML path), it's skipped here.
+     */
+    fun generateFromTierReasons(
+        tierStats: List<TierReasonStat>,
+        existingSuggestions: List<Suggestion>
+    ): List<Suggestion> {
+        val already = existingSuggestions.mapNotNull { parsePackageFromCondition(it.conditionJson) }.toSet()
+        val seenPackages = mutableSetOf<String>()
+        seenPackages.addAll(already)
+
+        val out = mutableListOf<Suggestion>()
+        for (stat in tierStats) {
+            if (stat.packageName in seenPackages) continue
+            if (stat.count < TIER_SUGGEST_MIN_VOLUME) continue
+
+            val tapRate = if (stat.count > 0) stat.tapped.toFloat() / stat.count else 0f
+            if (tapRate >= TIER_SUGGEST_TAP_CEILING) continue
+
+            val appName = friendlyName(stat.packageName)
+            val rationale = rationaleForTierReason(stat.tierReason, appName, stat.count)
+                ?: continue
+
+            out.add(
+                Suggestion(
+                    conditionJson = Json.encodeToString(
+                        RuleCondition.PackageMatch(packageName = stat.packageName)
+                    ),
+                    action = "suppress",
+                    rationale = rationale,
+                    status = "pending"
+                )
+            )
+            seenPackages += stat.packageName
+        }
+        return out
+    }
+
+    /** Maps a tier_reason code to a user-facing rationale. Returns null to skip. */
+    private fun rationaleForTierReason(reason: String, appName: String, count: Int): String? = when (reason) {
+        "linkedin" ->
+            "${appName} has sent $count engagement notifications you rarely open. Suppressing these would remove them before they interrupt you."
+        "amazon_shopping" ->
+            "${appName} has sent $count shopping/promotional notifications you rarely open. Suppressing them would silence the noise."
+        "play_store_update" ->
+            "Play Store has posted $count update notifications. Suppressing them keeps your app-update flow invisible."
+        "marketing_text" ->
+            "$count marketing/promotional notifications from ${appName} match unsubscribe-style keywords. Suppressing would silence this channel."
+        else -> null
+    }
+
+    /** Extracts the packageName from a PackageMatch condition JSON, or null if other shape. */
+    private fun parsePackageFromCondition(conditionJson: String): String? = try {
+        val obj = Json.parseToJsonElement(conditionJson) as? kotlinx.serialization.json.JsonObject
+        obj?.get("packageName")?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }
+    } catch (_: Exception) { null }
+
     // -----------------------------------------------------------------------------------------
     // Suggestion builders
     // -----------------------------------------------------------------------------------------
@@ -256,5 +324,12 @@ class SuggestionGenerator @Inject constructor() {
 
         /** Minimum lifetime notifications before suppress is considered. */
         private const val LIFETIME_SUPPRESS_THRESHOLD = 30
+
+        // ── Tier-based suggestion thresholds ────────────────────────────────
+        /** Minimum count for a (package, tier_reason) pair to be suggest-worthy. */
+        const val TIER_SUGGEST_MIN_VOLUME = 20
+
+        /** If tap rate on a tier_reason pair is at/above this, skip the suggestion. */
+        const val TIER_SUGGEST_TAP_CEILING = 0.05f
     }
 }

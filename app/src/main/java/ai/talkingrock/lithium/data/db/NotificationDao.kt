@@ -16,6 +16,15 @@ import kotlinx.coroutines.flow.Flow
 /** Projection used by [NotificationDao.getTierBreakdown]. */
 data class TierCount(val tier: Int, val count: Int)
 
+/** Projection for per-(package, tier_reason) aggregation. */
+data class TierReasonStat(
+    @androidx.room.ColumnInfo(name = "package_name") val packageName: String,
+    @androidx.room.ColumnInfo(name = "tier_reason") val tierReason: String,
+    val tier: Int,
+    val count: Int,
+    val tapped: Int
+)
+
 @Dao
 interface NotificationDao {
 
@@ -140,4 +149,21 @@ interface NotificationDao {
     /** Updates tier and tier_reason for a single row. */
     @Query("UPDATE notifications SET tier = :tier, tier_reason = :reason WHERE id = :id")
     suspend fun updateTier(id: Long, tier: Int, reason: String)
+
+    /**
+     * Per-(package, tier_reason) aggregation for tier ≤ [maxTier], since [sinceMs].
+     * Used by SuggestionGenerator to propose suppress/queue rules from the tier
+     * classifier's deterministic reason codes (marketing_text, linkedin, etc.)
+     * — independent of the ML category path.
+     */
+    @Query(
+        "SELECT package_name, tier_reason, tier, COUNT(*) AS count, " +
+        "SUM(CASE WHEN removal_reason = 'click' THEN 1 ELSE 0 END) AS tapped " +
+        "FROM notifications " +
+        "WHERE posted_at_ms >= :sinceMs AND tier <= :maxTier AND tier_reason IS NOT NULL " +
+        "GROUP BY package_name, tier_reason, tier " +
+        "HAVING count >= :minCount " +
+        "ORDER BY count DESC"
+    )
+    suspend fun getTierReasonStats(sinceMs: Long, maxTier: Int, minCount: Int): List<TierReasonStat>
 }

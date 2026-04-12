@@ -233,14 +233,33 @@ class AiAnalysisWorker @AssistedInject constructor(
         // Attach the report ID to each suggestion before insertion.
         val linkedSuggestions = rawSuggestions.map { it.copy(reportId = reportId) }
 
-        if (linkedSuggestions.isNotEmpty()) {
+        // Tier-reason based suggestions (wider window, deterministic — works without ML models).
+        val tierSince = System.currentTimeMillis() - SUGGEST_WINDOW_MS
+        val tierStats = try {
+            notificationDao.getTierReasonStats(
+                sinceMs = tierSince,
+                maxTier = 1,
+                minCount = SuggestionGenerator.TIER_SUGGEST_MIN_VOLUME
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "doWork: tier-reason stats query failed", e)
+            emptyList()
+        }
+        val tierSuggestions = suggestionGenerator
+            .generateFromTierReasons(tierStats, rawSuggestions)
+            .map { it.copy(reportId = reportId) }
+        Log.d(TAG, "doWork: tier-path suggestions=${tierSuggestions.size} (stats rows=${tierStats.size})")
+
+        val allSuggestions = linkedSuggestions + tierSuggestions
+
+        if (allSuggestions.isNotEmpty()) {
             try {
-                reportRepository.insertSuggestions(linkedSuggestions)
+                reportRepository.insertSuggestions(allSuggestions)
             } catch (e: Exception) {
                 Log.e(TAG, "doWork: failed to insert suggestions", e)
                 // Non-fatal: the report already exists; suggestions can be retried on next run.
             }
-            Log.d(TAG, "doWork: inserted ${linkedSuggestions.size} suggestion(s)")
+            Log.d(TAG, "doWork: inserted ${allSuggestions.size} suggestion(s) (ml=${linkedSuggestions.size}, tier=${tierSuggestions.size})")
         } else {
             Log.d(TAG, "doWork: no suggestions generated")
         }
@@ -288,6 +307,10 @@ class AiAnalysisWorker @AssistedInject constructor(
             // Non-fatal: profiles will catch up on next run.
         }
 
+        // Capture suggestion count for the completion notification, before
+        // moving on to retention/profile/cleanup steps.
+        val finalSuggestionCount = allSuggestions.size
+
         // ---------------------------------------------------------------------------------
         // Step 8: Release AI models to free native memory
         // ---------------------------------------------------------------------------------
@@ -301,7 +324,7 @@ class AiAnalysisWorker @AssistedInject constructor(
 
         Log.d(TAG, "doWork: analysis pass complete")
         postCompletionNotification(
-            suggestionCount = linkedSuggestions.size,
+            suggestionCount = finalSuggestionCount,
             hasReport = true
         )
         return Result.success()
@@ -365,8 +388,11 @@ class AiAnalysisWorker @AssistedInject constructor(
         /** Unique work name used for scheduling and re-enqueuing. */
         const val WORK_NAME = "lithium_ai_analysis"
 
-        /** Analysis window: 24 hours in milliseconds. */
+        /** Analysis window: 24 hours in milliseconds (used for the daily report). */
         const val ANALYSIS_WINDOW_MS = 24 * 60 * 60 * 1000L
+
+        /** Wider window used by the tier-reason suggestion path to catch lifetime patterns. */
+        const val SUGGEST_WINDOW_MS = 30L * 24L * 60L * 60L * 1000L
 
         /** Completion-notification channel and IDs. */
         private const val CHANNEL_ID = "lithium_briefing"
