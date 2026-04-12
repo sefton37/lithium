@@ -189,6 +189,10 @@ dependencies {
     testImplementation(libs.turbine)
     testImplementation(libs.robolectric)
     testImplementation(libs.room.testing)
+    testImplementation(libs.ktor.server.test.host)
+    testImplementation(libs.ktor.client.content.negotiation)
+    testImplementation(libs.ktor.serialization.kotlinx.json)
+    testImplementation(libs.kotlinx.json)
 
     // Instrumented tests
     androidTestImplementation(libs.junit.android)
@@ -198,6 +202,12 @@ dependencies {
     androidTestImplementation(libs.room.testing)
     androidTestImplementation(libs.room.ktx)
     androidTestImplementation(libs.coroutines.test)
+    // Compose UI tests (Phase 4)
+    androidTestImplementation(libs.compose.ui.test.junit4)
+    debugImplementation(libs.compose.ui.test.manifest)
+    // Hilt testing (Phase 4 Compose UI tests)
+    androidTestImplementation(libs.hilt.android.testing)
+    kaptAndroidTest(libs.hilt.compiler)
 }
 
 // Allow Hilt's kapt to use the correct Java version

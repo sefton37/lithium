@@ -1,5 +1,11 @@
-# Flow: Open Add Rule form and verify it renders
-# Prerequisites: Permissions granted by run-tests.sh Phase 2
+# Flow: Create a rule end-to-end and verify it appears in the Rules list.
+# Prerequisites: Permissions granted by run-tests.sh Phase 2. Test notifications
+# posted in Phase 2 should be recorded by the listener, populating the observed-app
+# dropdown used by the Add Rule form.
+#
+# The app-observation list is data-dependent: if no apps are observed yet, the
+# dropdown shows "No apps observed yet…" and saving is disabled. This flow handles
+# both paths via runFlow branches.
 appId: ai.talkingrock.lithium.debug
 ---
 - stopApp
@@ -19,9 +25,7 @@ appId: ai.talkingrock.lithium.debug
       text: "Rules"
     timeout: 5000
 
-# Tap the FAB to add a rule
-# Compose FABs expose contentDescription as the accessibility label, not resource-id.
-# Maestro resolves accessibility labels via text match.
+# Tap the FAB to add a rule (Compose FAB exposes contentDescription)
 - tapOn: "Add rule"
 
 # Should see the Add Rule form
@@ -37,9 +41,59 @@ appId: ai.talkingrock.lithium.debug
 - assertVisible: "Description"
 - assertVisible: "Save Rule"
 
-# Go back to Rules
-- pressKey: back
-- extendedWaitUntil:
-    visible:
-      text: "Rules"
-    timeout: 5000
+# Enter a description that we can search for in the Rules list afterward
+- tapOn: "Description"
+- inputText: "maestro-05-rule"
+- hideKeyboard
+
+# Open the App dropdown
+- tapOn: "Select an app"
+
+# If observed-apps list is empty, abort the save path and just back out.
+- runFlow:
+    when:
+      visible: "No apps observed yet. Notifications will appear here after Lithium runs."
+    commands:
+      - pressKey: back
+      - pressKey: back
+      - extendedWaitUntil:
+          visible:
+            text: "Rules"
+          timeout: 5000
+
+# If the dropdown populated, pick an observed package. Notifications posted via
+# `adb shell cmd notification post` register under the shell package, so that's
+# what will appear in the observed-apps list during the test run.
+- runFlow:
+    when:
+      visible: "com.android.shell"
+    commands:
+      - tapOn: "com.android.shell"
+      # Pick an Action — open the Action dropdown and choose "Suppress"
+      - tapOn:
+          text: "Action"
+          index: 1
+      - extendedWaitUntil:
+          visible:
+            text: "Suppress"
+          timeout: 3000
+      - tapOn: "Suppress"
+      # Save the rule
+      - tapOn: "Save Rule"
+      # After save we should be back on the Rules list; verify the rule row exists.
+      - extendedWaitUntil:
+          visible:
+            text: "maestro-05-rule"
+          timeout: 5000
+      - assertVisible: "maestro-05-rule"
+
+# If neither branch matched (defensive fallback): ensure we return to Rules
+- runFlow:
+    when:
+      notVisible: "Rules"
+    commands:
+      - pressKey: back
+      - extendedWaitUntil:
+          visible:
+            text: "Rules"
+          timeout: 5000

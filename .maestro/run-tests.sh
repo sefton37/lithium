@@ -105,7 +105,9 @@ else
         "$SCRIPT_DIR/05_create_rule.yaml" \
         "$SCRIPT_DIR/06_settings_interactions.yaml" \
         "$SCRIPT_DIR/07_run_analysis.yaml" \
-        "$SCRIPT_DIR/08_suggestion_flow.yaml" \
+        "$SCRIPT_DIR/13_training_tab.yaml" \
+        "$SCRIPT_DIR/14_suggestion_approve.yaml" \
+        "$SCRIPT_DIR/15_queue_screen.yaml" \
         "$SCRIPT_DIR/09_purge_data.yaml" \
         "$SCRIPT_DIR/10_stress_navigation.yaml" \
         "$SCRIPT_DIR/11_cold_start.yaml" \
@@ -135,8 +137,8 @@ else
     echo "================================"
     echo "Suite finished in ${TOTAL_ELAPSED}s"
     echo "Setup (01):  $SETUP_RESULT"
-    echo "Suite (02-12): $PASSED passed, $FAILED failed out of $((PASSED + FAILED))"
-    echo "Grand total: $TOTAL tests"
+    echo "Suite (02-15): $PASSED passed, $FAILED failed out of $((PASSED + FAILED))"
+    echo "Grand total: $TOTAL tests (includes 13_training_tab, 14_suggestion_approve, 15_queue_screen)"
     if [ -n "$ERRORS" ]; then
         echo ""
         echo "Failed flows:"

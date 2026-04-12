@@ -1,0 +1,50 @@
+# Flow: Queue tab — verify the screen renders in either empty or populated state.
+# Prerequisites: Permissions granted by run-tests.sh Phase 2.
+# The Queue screen renders one of two states:
+#   - Empty state ("No queued notifications.") when no rule uses the Queue action
+#   - Populated state ("Queued (N)" header + item cards) when queued items exist
+# Both paths are valid. This flow asserts the structural invariants common to both.
+appId: ai.talkingrock.lithium.debug
+---
+- stopApp
+- waitForAnimationToEnd
+- launchApp
+
+# Wait for main screen (Briefing tab is default)
+- extendedWaitUntil:
+    visible:
+      text: "Briefing"
+    timeout: 15000
+
+# Navigate to the Queue tab
+- tapOn: "Queue"
+
+# Queue screen is data-dependent. Either the empty-state copy is visible,
+# or the "Queued (N)" header is visible. Assert that at least one is present
+# via runFlow branches — both branches verify the screen did not crash.
+- runFlow:
+    when:
+      visible: "No queued notifications."
+    commands:
+      - assertVisible: "No queued notifications."
+      - assertVisible: "Rules that use 'Queue' will hold notifications here for your review."
+
+- runFlow:
+    when:
+      visible: "Queued "
+    commands:
+      - assertVisible: "Clear reviewed"
+
+# Bottom nav invariant — the tab bar remains intact from the Queue tab
+- assertVisible: "Briefing"
+- assertVisible: "Queue"
+- assertVisible: "Rules"
+- assertVisible: "Train"
+- assertVisible: "Settings"
+
+# Navigate back to Briefing for subsequent flows
+- tapOn: "Briefing"
+- extendedWaitUntil:
+    visible:
+      text: "Briefing"
+    timeout: 5000

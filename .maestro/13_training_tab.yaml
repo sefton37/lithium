@@ -1,0 +1,40 @@
+# Flow: Training tab — navigate to Train, verify the screen renders without crashing.
+# Prerequisites: Permissions granted by run-tests.sh Phase 2; app onboarded.
+# The Training screen renders one of two states:
+#   - Notification pair challenge (when DB has >= 2 eligible notifications)
+#   - Exhausted state (empty DB or all pairs judged)
+# Both paths are valid. This flow asserts the structural invariants that are
+# always present regardless of DB state.
+appId: ai.talkingrock.lithium.debug
+---
+- stopApp
+- waitForAnimationToEnd
+- launchApp
+
+# Wait for main screen (Briefing tab is default)
+- extendedWaitUntil:
+    visible:
+      text: "Briefing"
+    timeout: 15000
+
+# Navigate to the Training tab (labeled "Train" in the bottom nav)
+- tapOn: "Train"
+
+# Wait for Training screen — the "Free play" quest chip is always rendered
+# in the chip row, regardless of DB state or level.
+- extendedWaitUntil:
+    visible:
+      text: "Free play"
+    timeout: 10000
+
+# The bottom nav is always visible from the training tab
+- assertVisible: "Briefing"
+- assertVisible: "Train"
+- assertVisible: "Settings"
+
+# Navigate back to Briefing for subsequent flows
+- tapOn: "Briefing"
+- extendedWaitUntil:
+    visible:
+      text: "Briefing"
+    timeout: 5000

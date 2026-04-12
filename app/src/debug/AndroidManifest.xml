@@ -4,5 +4,14 @@
         <activity
             android:name="ai.talkingrock.lithium.debug.SimulationActivity"
             android:exported="true" />
+        <!--
+            Minimal activity for Hilt Compose UI tests (Phase 4).
+            Declared in the debug APK so createAndroidComposeRule can launch it
+            in the app process (ai.talkingrock.lithium.debug) rather than the
+            test process (debug.test). Activity itself renders nothing.
+        -->
+        <activity
+            android:name="ai.talkingrock.lithium.HiltTestActivity"
+            android:exported="false" />
     </application>
 </manifest>

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    androidTest manifest — merge additions for the test APK only.
+    HiltTestActivity is declared in the debug source set manifest (app/src/debug/AndroidManifest.xml)
+    so it lives in the main app process (ai.talkingrock.lithium.debug), not the test process.
+    This is required for createAndroidComposeRule<HiltTestActivity>() to work correctly.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" />

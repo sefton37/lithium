@@ -71,6 +71,9 @@ class LithiumApiServer @Inject constructor(
         Log.i(TAG, "API server stopped")
     }
 
+    /** Exposed for unit tests via [LithiumApiServerTest]. */
+    internal fun configureRoutesForTest(routing: Routing) = routing.configureRoutes()
+
     private fun Routing.configureRoutes() {
 
         get("/api/health") {

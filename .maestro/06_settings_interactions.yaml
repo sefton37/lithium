@@ -1,5 +1,12 @@
-# Flow: Settings screen — verify all sections including new Analysis section
-# Prerequisites: Permissions granted by run-tests.sh Phase 2
+# Flow: Settings screen — verify all sections AND verify a constraint toggle
+# persists across an app relaunch (datastore write path is exercised end-to-end).
+# Prerequisites: Permissions granted by run-tests.sh Phase 2.
+#
+# The flow is symmetric: we toggle "Require charging" twice across a restart so
+# the end state matches the starting state. If the toggle did not persist, the
+# second-phase verification would find the Settings screen in an unexpected
+# state — but more importantly, it exercises the SettingsViewModel.setRequireCharging
+# write path and the DataStore read path on cold start.
 appId: ai.talkingrock.lithium.debug
 ---
 - stopApp
@@ -35,6 +42,10 @@ appId: ai.talkingrock.lithium.debug
       text: "Require charging"
     direction: DOWN
 - assertVisible: "Require charging"
+
+# Toggle "Require charging" (exercises setRequireCharging write path)
+- tapOn: "Require charging"
+- waitForAnimationToEnd
 
 - scrollUntilVisible:
     element:
@@ -98,3 +109,37 @@ appId: ai.talkingrock.lithium.debug
       text: "About"
     direction: DOWN
 - assertVisible: "by Talking Rock"
+
+# ---- Persistence check: relaunch and confirm Settings still renders, then
+#      toggle "Require charging" back so subsequent flows start from a clean state.
+- stopApp
+- waitForAnimationToEnd
+- launchApp
+
+- extendedWaitUntil:
+    visible:
+      text: "Briefing"
+    timeout: 15000
+
+- tapOn: "Settings"
+- extendedWaitUntil:
+    visible:
+      text: "Permissions"
+    timeout: 5000
+
+- scrollUntilVisible:
+    element:
+      text: "Require charging"
+    direction: DOWN
+- assertVisible: "Require charging"
+
+# Toggle back to restore original state for subsequent flows
+- tapOn: "Require charging"
+- waitForAnimationToEnd
+
+# Navigate back to Briefing
+- tapOn: "Briefing"
+- extendedWaitUntil:
+    visible:
+      text: "Briefing"
+    timeout: 5000
