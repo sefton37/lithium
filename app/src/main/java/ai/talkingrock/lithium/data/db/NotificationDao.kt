@@ -121,4 +121,19 @@ interface NotificationDao {
     @Query("SELECT tier, COUNT(*) AS count FROM notifications GROUP BY tier ORDER BY tier ASC")
     suspend fun getTierBreakdown(): List<TierCount>
 
+    /**
+     * Returns the next batch of rows with no tier_reason set.
+     * Rows created before the v3→v4 migration got tier=2 and tier_reason=NULL;
+     * this query finds them for retroactive classification.
+     */
+    @Query("SELECT * FROM notifications WHERE tier_reason IS NULL ORDER BY id ASC LIMIT :limit")
+    suspend fun getTierBackfillBatch(limit: Int): List<NotificationRecord>
+
+    /** Count of rows still needing tier backfill. */
+    @Query("SELECT COUNT(*) FROM notifications WHERE tier_reason IS NULL")
+    suspend fun countTierBackfillRemaining(): Int
+
+    /** Updates tier and tier_reason for a single row. */
+    @Query("UPDATE notifications SET tier = :tier, tier_reason = :reason WHERE id = :id")
+    suspend fun updateTier(id: Long, tier: Int, reason: String)
 }

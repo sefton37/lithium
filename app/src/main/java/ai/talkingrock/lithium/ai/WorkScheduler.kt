@@ -8,6 +8,7 @@ import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import ai.talkingrock.lithium.classification.TierBackfillWorker
 import ai.talkingrock.lithium.data.Prefs
 import java.util.concurrent.TimeUnit
 
@@ -124,6 +125,28 @@ object WorkScheduler {
         )
 
         Log.d(TAG, "scheduleHealthCheck: enqueued (KEEP policy, 6h interval, no constraints)")
+    }
+
+    /**
+     * Enqueues a one-shot [TierBackfillWorker] to retroactively classify rows
+     * that predate the v3→v4 migration (tier_reason IS NULL).
+     *
+     * Policy: [ExistingWorkPolicy.KEEP] — idempotent on app restart; if the
+     * job is already queued or running, leave it alone. The worker itself is
+     * resumable (queries `tier_reason IS NULL` each batch) so duplicate
+     * triggers are harmless but wasteful.
+     *
+     * No constraints — the work is pure CPU against local SQLCipher and
+     * should run to completion on first launch regardless of power state.
+     */
+    fun scheduleTierBackfill(workManager: WorkManager) {
+        val workRequest = OneTimeWorkRequestBuilder<TierBackfillWorker>().build()
+        workManager.enqueueUniqueWork(
+            TierBackfillWorker.WORK_NAME,
+            ExistingWorkPolicy.KEEP,
+            workRequest
+        )
+        Log.d(TAG, "scheduleTierBackfill: enqueued (KEEP policy, one-shot, no constraints)")
     }
 
     private fun buildConstraints(prefs: SharedPreferences?): Constraints {

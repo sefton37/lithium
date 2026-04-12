@@ -43,6 +43,7 @@ class LithiumApp : Application(), Configuration.Provider {
         val workManager = WorkManager.getInstance(this)
         scheduleAiAnalysisWork(workManager)
         scheduleHealthCheckWork(workManager)
+        WorkScheduler.scheduleTierBackfill(workManager)
         startApiService()  // Phase 1: embedded Ktor API server
     }
 
