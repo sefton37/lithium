@@ -16,6 +16,19 @@ import kotlinx.coroutines.flow.Flow
 /** Projection used by [NotificationDao.getTierBreakdown]. */
 data class TierCount(val tier: Int, val count: Int)
 
+/**
+ * Pattern-coverage projection. Each row represents one notification "pattern"
+ * in plain language — e.g., "Messages · sms_unknown" — with how many rows in
+ * the pool share it and how many have been judged so far.
+ */
+data class PatternStat(
+    val pattern: String,
+    val packageName: String,
+    val tierReason: String,
+    val total: Int,
+    val judged: Int
+)
+
 /** Projection for per-(package, tier_reason) aggregation. */
 data class TierReasonStat(
     @androidx.room.ColumnInfo(name = "package_name") val packageName: String,
@@ -190,8 +203,7 @@ interface NotificationDao {
     suspend fun getUnclassifiedCandidates(limit: Int, excludeIds: List<Long>): List<NotificationRecord>
 
     /**
-     * Total count of eligible training candidates in the DB. Used to compute
-     * the dynamic level ladder (max achievable XP scales with this count).
+     * Total count of eligible training candidates in the DB.
      */
     @Query(
         "SELECT COUNT(*) FROM notifications " +
@@ -199,6 +211,29 @@ interface NotificationDao {
         "  AND (title IS NOT NULL OR text IS NOT NULL)"
     )
     fun countAmbiguityPoolFlow(): kotlinx.coroutines.flow.Flow<Int>
+
+    /**
+     * Pattern coverage — one row per unique (package, tier_reason) combo
+     * in the eligible pool, with the count of rows in the pool and the
+     * count that have been judged (non-skip). Drives pattern-based
+     * leveling and active-learning pair selection.
+     */
+    @Query(
+        "SELECT (n.package_name || '|' || COALESCE(n.tier_reason, 'none')) AS pattern, " +
+        "       n.package_name AS packageName, " +
+        "       COALESCE(n.tier_reason, 'none') AS tierReason, " +
+        "       COUNT(*) AS total, " +
+        "       SUM(CASE WHEN n.id IN (" +
+        "         SELECT left_notification_id FROM training_judgments WHERE choice != 'skip' " +
+        "         UNION " +
+        "         SELECT right_notification_id FROM training_judgments WHERE choice != 'skip'" +
+        "       ) THEN 1 ELSE 0 END) AS judged " +
+        "FROM notifications n " +
+        "WHERE n.tier > 0 AND n.is_ongoing = 0 " +
+        "  AND (n.title IS NOT NULL OR n.text IS NOT NULL) " +
+        "GROUP BY pattern"
+    )
+    fun getPatternStatsFlow(): kotlinx.coroutines.flow.Flow<List<PatternStat>>
 
     /**
      * Per-(package, tier_reason) aggregation for tier ≤ [maxTier], since [sinceMs].

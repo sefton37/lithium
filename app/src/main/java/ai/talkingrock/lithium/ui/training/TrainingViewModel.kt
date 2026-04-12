@@ -4,7 +4,7 @@ import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import ai.talkingrock.lithium.data.db.NotificationDao
-import ai.talkingrock.lithium.data.db.QuestXp
+import ai.talkingrock.lithium.data.db.PatternStat
 import ai.talkingrock.lithium.data.db.TrainingJudgmentDao
 import ai.talkingrock.lithium.data.model.NotificationRecord
 import ai.talkingrock.lithium.data.model.TrainingJudgment
@@ -17,30 +17,29 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 import javax.inject.Inject
 
-/** Screen state for the Training tab. */
 data class TrainingUiState(
     val left: NotificationRecord? = null,
     val right: NotificationRecord? = null,
     val isLoading: Boolean = true,
     val exhausted: Boolean = false,
     val setPosition: Int = 0,
-    /** Non-null while the battle animation for the last judgment is playing. */
     val lastBattle: BattleOutcome? = null
 )
 
-/** Outcome of the most recent judgment, drives the smash animation. */
 enum class BattleOutcome { LEFT_WINS, RIGHT_WINS, TIE, SKIPPED }
 
 sealed class XpEvent {
-    data class Judgment(val xp: Int) : XpEvent()
+    data class Judgment(val xp: Int, val patternNewlyMapped: Boolean) : XpEvent()
     data class SetComplete(val bonusXp: Int, val totalSetXp: Int) : XpEvent()
     data class QuestComplete(val quest: Quest, val totalXp: Int) : XpEvent()
+    data class LevelUp(val level: TrainerLevel) : XpEvent()
 }
 
 @HiltViewModel
@@ -61,25 +60,49 @@ class TrainingViewModel @Inject constructor(
     )
     val activeQuest: StateFlow<Quest> = _activeQuest.asStateFlow()
 
-    /** XP per quest id. Key is questId, value is XP. */
     val questXp: StateFlow<Map<String, Int>> = judgmentDao.xpByQuestFlow()
         .map { it.associate { row -> row.questId to row.xp } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
-    private var setXpAccumulator = 0
-    private var setCompletedInThisRun = 0
+    /** Pattern stats, reactive. One row per (package, tier_reason). */
+    val patternStats: StateFlow<List<PatternStat>> = notificationDao.getPatternStatsFlow()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    /** Trainer snapshot driven by total XP. */
-    val trainer: StateFlow<TrainerSnapshot> = judgmentDao.totalXpFlow()
-        .map { TrainerLevels.snapshot(it) }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TrainerLevels.snapshot(0))
+    /** Trainer snapshot driven by patterns mapped + total XP (for display). */
+    val trainer: StateFlow<TrainerSnapshot> = combine(
+        judgmentDao.totalXpFlow(),
+        patternStats
+    ) { xp, stats ->
+        TrainerLevels.snapshot(
+            xp = xp,
+            mapped = stats.count { it.isMapped() },
+            total = stats.size
+        )
+    }.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5_000),
+        TrainerLevels.snapshot(0, 0, 0)
+    )
 
     val judgmentCount: StateFlow<Int> = judgmentDao.countFlow()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
-    init { loadNextPair() }
+    private var setXpAccumulator = 0
+    private var setCompletedInThisRun = 0
+    /** Last level ordinal observed — used to detect level-up transitions. */
+    private var lastLevelOrdinal = 0
 
-    /** Change the active quest. Resets current-set progress for cleaner feedback. */
+    init {
+        loadNextPair()
+        viewModelScope.launch {
+            trainer.collect { snap ->
+                if (snap.level.ordinal > lastLevelOrdinal) {
+                    _xpEvents.emit(XpEvent.LevelUp(snap.level))
+                }
+                lastLevelOrdinal = snap.level.ordinal
+            }
+        }
+    }
+
     fun selectQuest(questId: String) {
         val q = Quests.byId(questId)
         _activeQuest.value = q
@@ -97,15 +120,26 @@ class TrainingViewModel @Inject constructor(
         val quest = _activeQuest.value
 
         viewModelScope.launch {
-            val xp = computeXpForJudgment(choice, left, right)
+            val stats = patternStats.value
+            val leftKey = patternKey(left)
+            val rightKey = patternKey(right)
+            val counts = stats.associate { it.pattern to it.judged }
+            val xp = computeXpForJudgment(choice, leftKey, rightKey, counts)
             val isRealJudgment = choice != "skip"
 
             val willCompleteSet = isRealJudgment && (setCompletedInThisRun + 1) == SET_SIZE
             val pendingSetXp = if (willCompleteSet) setXpAccumulator + xp else 0
             val bonus = if (willCompleteSet) (pendingSetXp * SET_BONUS_MULTIPLIER).roundToInt() else 0
 
-            // Capture quest XP BEFORE insert so we can detect quest-complete transition.
             val questXpBefore = questXp.value[quest.id] ?: 0
+
+            // Detect newly-mapped patterns: a pattern becomes mapped when this
+            // judgment pushes its judged count to exactly MIN_JUDGMENTS_TO_MAP.
+            val newlyMapped = listOf(left, right).any { row ->
+                val key = patternKey(row)
+                val was = counts[key] ?: 0
+                was == MIN_JUDGMENTS_TO_MAP - 1 && isRealJudgment
+            }
 
             judgmentDao.insert(
                 TrainingJudgment(
@@ -128,12 +162,9 @@ class TrainingViewModel @Inject constructor(
                 )
             )
 
-            if (xp > 0) _xpEvents.emit(XpEvent.Judgment(xp))
-            if (willCompleteSet) {
-                _xpEvents.emit(XpEvent.SetComplete(bonus, pendingSetXp))
-            }
+            if (xp > 0) _xpEvents.emit(XpEvent.Judgment(xp, newlyMapped))
+            if (willCompleteSet) _xpEvents.emit(XpEvent.SetComplete(bonus, pendingSetXp))
 
-            // Quest complete event — fires once when crossing the goal threshold.
             if (quest.goalXp > 0 && quest != Quests.FREE_PLAY) {
                 val questXpAfter = questXpBefore + xp + bonus
                 if (questXpBefore < quest.goalXp && questXpAfter >= quest.goalXp) {
@@ -160,13 +191,21 @@ class TrainingViewModel @Inject constructor(
                 }
             )
 
-            // Let the animation play for BATTLE_DURATION_MS before loading the next pair.
             kotlinx.coroutines.delay(BATTLE_DURATION_MS)
             _uiState.value = _uiState.value.copy(lastBattle = null)
             loadNextPair()
         }
     }
 
+    /**
+     * Active-learning pair selection:
+     *   1. Fetch a wide pool of ambiguous candidates (respecting the active quest).
+     *   2. Pick the row whose pattern is least-judged.
+     *   3. Pair it with another row from a DIFFERENT unmapped pattern when possible,
+     *      so each judgment extends coverage rather than deepening it.
+     *   4. If no cross-pattern match exists in the pool, fall back to a
+     *      different-package row; finally, whatever's second-best.
+     */
     private fun loadNextPair() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true)
@@ -183,19 +222,25 @@ class TrainingViewModel @Inject constructor(
                     excludeIds = if (excluded.isEmpty()) listOf(-1L) else excluded
                 )
             }
-            val filtered = if (quest.packagePrefixes.isEmpty()) raw
+            val questFiltered = if (quest.packagePrefixes.isEmpty()) raw
             else raw.filter { row -> quest.packagePrefixes.any { row.packageName.startsWith(it) } }
 
-            if (filtered.size < 2) {
+            if (questFiltered.size < 2) {
                 _uiState.value = _uiState.value.copy(
                     left = null, right = null,
                     isLoading = false, exhausted = true
                 )
                 return@launch
             }
-            val first = filtered.first()
-            val second = filtered.drop(1).firstOrNull { it.packageName != first.packageName }
-                ?: filtered[1]
+
+            val counts = patternStats.first().associate { it.pattern to it.judged }
+            val sorted = questFiltered.sortedBy { counts[patternKey(it)] ?: 0 }
+            val first = sorted.first()
+            val firstPattern = patternKey(first)
+            val second = sorted.drop(1).firstOrNull { patternKey(it) != firstPattern }
+                ?: sorted.drop(1).firstOrNull { it.packageName != first.packageName }
+                ?: sorted[1]
+
             _uiState.value = _uiState.value.copy(
                 left = first, right = second,
                 isLoading = false, exhausted = false
@@ -204,9 +249,8 @@ class TrainingViewModel @Inject constructor(
     }
 
     companion object {
-        private const val CANDIDATE_POOL_SIZE = 40
+        private const val CANDIDATE_POOL_SIZE = 60
         private const val PREF_ACTIVE_QUEST = "training_active_quest"
-        /** How long the battle animation runs before the next pair loads. */
         const val BATTLE_DURATION_MS = 650L
     }
 }

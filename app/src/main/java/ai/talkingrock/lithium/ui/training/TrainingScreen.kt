@@ -167,9 +167,14 @@ private fun TrainerHeader(
             modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp))
         )
         val nextLabel = trainer.nextLevel?.let {
-            val toGo = (it.floor - trainer.xp).coerceAtLeast(0)
-            "$toGo XP to ${it.name}"
-        } ?: "Master — RLHF unlocked"
+            val toGo = (it.floorPatterns - trainer.patternsMapped).coerceAtLeast(0)
+            "$toGo more patterns to ${it.name}"
+        } ?: "Master — Lithium tracks your taste"
+        Text(
+            "${trainer.patternsMapped} of ${trainer.patternsTotal} notification patterns mapped",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -445,6 +450,7 @@ private fun FloatingXpCallout(eventId: Int, event: XpEvent?) {
     LaunchedEffect(eventId) {
         visible = true
         delay(when (event) {
+            is XpEvent.LevelUp -> 2600L
             is XpEvent.QuestComplete -> 2400L
             is XpEvent.SetComplete -> 1800L
             else -> 900L
@@ -459,14 +465,22 @@ private fun FloatingXpCallout(eventId: Int, event: XpEvent?) {
     ) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
             when (event) {
-                is XpEvent.Judgment ->
-                    XpBadge("+${event.xp} XP", "signal captured")
+                is XpEvent.Judgment -> XpBadge(
+                    "+${event.xp} XP",
+                    if (event.patternNewlyMapped) "pattern mapped"
+                    else if (event.xp >= 7) "new territory"
+                    else "refining"
+                )
                 is XpEvent.SetComplete ->
                     XpBadge("Set complete! +${event.bonusXp} bonus",
                         "${event.totalSetXp + event.bonusXp} total this set")
                 is XpEvent.QuestComplete ->
                     XpBadge("Quest complete: ${event.quest.name}",
                         "+${event.totalXp} XP toward this slice")
+                is XpEvent.LevelUp -> XpBadge(
+                    "Level up — ${event.level.name}",
+                    event.level.unlock
+                )
             }
         }
     }

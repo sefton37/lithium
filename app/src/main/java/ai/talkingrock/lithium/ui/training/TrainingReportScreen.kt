@@ -39,6 +39,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ai.talkingrock.lithium.data.db.ChoiceCount
 import ai.talkingrock.lithium.data.db.NotificationDao
+import ai.talkingrock.lithium.data.db.PatternStat
 import ai.talkingrock.lithium.data.db.TrainingJudgmentDao
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -57,7 +58,8 @@ data class TrainingReportState(
     val totalJudged: Int,
     val poolSize: Int,
     val choiceBreakdown: Map<String, Int>,
-    val questXp: Map<String, Int>
+    val questXp: Map<String, Int>,
+    val topUnmappedPatterns: List<PatternStat> = emptyList()
 )
 
 @HiltViewModel
@@ -67,24 +69,44 @@ class TrainingReportViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val _choices = MutableStateFlow<Map<String, Int>>(emptyMap())
+
+    private data class Core(
+        val xp: Int, val total: Int, val pool: Int
+    )
+
     val state: StateFlow<TrainingReportState> = combine(
-        judgmentDao.totalXpFlow(),
-        judgmentDao.countFlow(),
-        notificationDao.countAmbiguityPoolFlow(),
+        combine(
+            judgmentDao.totalXpFlow(),
+            judgmentDao.countFlow(),
+            notificationDao.countAmbiguityPoolFlow()
+        ) { xp, total, pool -> Core(xp, total, pool) },
         _choices,
-        judgmentDao.xpByQuestFlow().map { it.associate { q -> q.questId to q.xp } }
-    ) { xp, total, pool, choices, questXp ->
+        judgmentDao.xpByQuestFlow().map { it.associate { q -> q.questId to q.xp } },
+        notificationDao.getPatternStatsFlow()
+    ) { core, choices, questXp, stats ->
+        val mapped = stats.count { it.isMapped() }
         TrainingReportState(
-            trainer = TrainerLevels.snapshot(xp),
-            totalJudged = total,
-            poolSize = pool,
+            trainer = TrainerLevels.snapshot(core.xp, mapped, stats.size),
+            totalJudged = core.total,
+            poolSize = core.pool,
             choiceBreakdown = choices,
-            questXp = questXp
+            questXp = questXp,
+            topUnmappedPatterns = stats
+                .filterNot { it.isMapped() }
+                .sortedByDescending { it.total }
+                .take(5)
         )
     }.stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5_000),
-        TrainingReportState(TrainerLevels.snapshot(0), 0, 0, emptyMap(), emptyMap())
+        TrainingReportState(
+            trainer = TrainerLevels.snapshot(0, 0, 0),
+            totalJudged = 0,
+            poolSize = 0,
+            choiceBreakdown = emptyMap(),
+            questXp = emptyMap(),
+            topUnmappedPatterns = emptyList()
+        )
     )
 
     init {
@@ -119,7 +141,10 @@ fun TrainingReportScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             LevelCard(s.trainer, s.totalJudged)
-            GapClosedCard(s.totalJudged, s.poolSize)
+            PatternsMappedCard(s.trainer)
+            if (s.topUnmappedPatterns.isNotEmpty()) {
+                UnmappedPatternsCard(s.topUnmappedPatterns)
+            }
             ChoiceBreakdownCard(s.choiceBreakdown)
             QuestProgressCard(s.questXp)
             Spacer(Modifier.height(32.dp))
@@ -155,8 +180,8 @@ private fun LevelCard(trainer: TrainerSnapshot, totalJudged: Int) {
                 modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp))
             )
             val sub = trainer.nextLevel?.let {
-                "${trainer.xp} XP · ${(it.floor - trainer.xp).coerceAtLeast(0)} to ${it.name}"
-            } ?: "${trainer.xp} XP · Master"
+                "${trainer.patternsMapped}/${it.floorPatterns} patterns to ${it.name} · ${trainer.xp} XP"
+            } ?: "Master · ${trainer.xp} XP"
             Text(sub, style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(
@@ -169,7 +194,7 @@ private fun LevelCard(trainer: TrainerSnapshot, totalJudged: Int) {
 }
 
 @Composable
-private fun GapClosedCard(judged: Int, pool: Int) {
+private fun PatternsMappedCard(trainer: TrainerSnapshot) {
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
@@ -180,26 +205,73 @@ private fun GapClosedCard(judged: Int, pool: Int) {
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Text(
-                "Ambiguity closed",
+                "Notification patterns mapped",
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.onSurface
             )
-            val pct = if (pool == 0) 0f else (judged.toFloat() / pool).coerceIn(0f, 1f)
+            val pct = if (trainer.patternsTotal == 0) 0f
+            else (trainer.patternsMapped.toFloat() / trainer.patternsTotal).coerceIn(0f, 1f)
             LinearProgressIndicator(
                 progress = { pct },
                 modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp))
             )
             Text(
-                "${(pct * 100).toInt()}% · $judged of $pool candidates judged",
+                "${trainer.patternsMapped} of ${trainer.patternsTotal} patterns mapped " +
+                    "(${(pct * 100).toInt()}%)",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Text(
-                "Leveling focuses on inflection points (quality), not exhaustion (quantity). " +
-                "A small amount of training in each quest is worth more than grinding through everything.",
+                "Every app sends a few kinds of notifications — LinkedIn nudges, Gmail " +
+                    "from strangers, Amazon shipping pings. Lithium groups them by kind. " +
+                    "Judging 3 examples of each kind is all Lithium needs to learn your taste " +
+                    "for that whole group — so you don't have to grade thousands one by one.",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+        }
+    }
+}
+
+@Composable
+private fun UnmappedPatternsCard(patterns: List<PatternStat>) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                "Biggest gaps — still unmapped",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                "These kinds fill the most space in your history. Judging a few from each " +
+                    "will level you up fastest.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            patterns.forEach { p ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "${ai.talkingrock.lithium.ai.AppNames.friendlyName(p.packageName)} · ${p.tierReason}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "${p.judged}/$MIN_JUDGMENTS_TO_MAP · ${p.total} rows",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
         }
     }
 }
