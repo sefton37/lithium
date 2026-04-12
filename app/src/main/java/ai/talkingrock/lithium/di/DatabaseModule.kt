@@ -144,6 +144,19 @@ object DatabaseModule {
      * single user judgment comparing two notifications, with a snapshot of the
      * tier/classification/confidence of each side at judgment time.
      */
+    /**
+     * Migration 5 → 6 adds XP and set-completion fields to training_judgments.
+     * Existing rows get xp_awarded=0, set_complete=false, set_bonus_xp=0
+     * (consistent with skipped-rows semantics; they contribute nothing to totals).
+     */
+    val MIGRATION_5_6 = object : Migration(5, 6) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE training_judgments ADD COLUMN xp_awarded INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE training_judgments ADD COLUMN set_complete INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE training_judgments ADD COLUMN set_bonus_xp INTEGER NOT NULL DEFAULT 0")
+        }
+    }
+
     val MIGRATION_4_5 = object : Migration(4, 5) {
         override fun migrate(db: SupportSQLiteDatabase) {
             db.execSQL(
@@ -253,7 +266,7 @@ object DatabaseModule {
         )
             .openHelperFactory(factory)
             .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
             // No fallback destructive migration — force explicit migrations.
             // If a migration is missing, the app crashes loudly rather than
             // silently wiping user data.

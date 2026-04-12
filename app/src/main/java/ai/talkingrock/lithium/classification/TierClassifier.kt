@@ -45,20 +45,24 @@ object TierClassifier {
             return 3 to "security_2fa"
         }
 
-        if (category == CATEGORY_CALL || packageName == "com.google.android.dialer") {
-            return if (isFromContact) 3 to "call_known" else 2 to "call_unknown"
-        }
-
-        if (packageName in MESSAGING_PACKAGES) {
-            return if (isFromContact) 3 to "sms_known" else 2 to "sms_unknown"
-        }
-
+        // Ongoing and transport notifications are always invisible — checked
+        // BEFORE channel rules so e.g. "Messages is doing work in background"
+        // (ongoing from com.google.android.apps.messaging) isn't misclassified
+        // as Tier 2 sms_unknown.
         if (category == CATEGORY_TRANSPORT) {
             return 0 to "media_transport"
         }
 
         if (isOngoing) {
             return 0 to "ongoing_persistent"
+        }
+
+        if (category == CATEGORY_CALL || packageName == "com.google.android.dialer") {
+            return if (isFromContact) 3 to "call_known" else 2 to "call_unknown"
+        }
+
+        if (packageName in MESSAGING_PACKAGES) {
+            return if (isFromContact) 3 to "sms_known" else 2 to "sms_unknown"
         }
 
         if (packageName in CALENDAR_PACKAGES || category == CATEGORY_REMINDER) {

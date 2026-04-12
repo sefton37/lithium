@@ -29,6 +29,17 @@ interface TrainingJudgmentDao {
     /** Distribution of choice values — used for future dashboards. */
     @Query("SELECT choice, COUNT(*) AS count FROM training_judgments GROUP BY choice")
     suspend fun getChoiceBreakdown(): List<ChoiceCount>
+
+    /**
+     * Count of non-skip judgments since [sinceMs]. Used for the daily-goal counter.
+     * Skips are excluded — they indicate "couldn't judge," not real training signal.
+     */
+    @Query("SELECT COUNT(*) FROM training_judgments WHERE created_at_ms >= :sinceMs AND choice != 'skip'")
+    fun countSinceFlow(sinceMs: Long): Flow<Int>
+
+    /** Cumulative XP (per-judgment XP + set bonuses) — all non-skip rows. */
+    @Query("SELECT COALESCE(SUM(xp_awarded + set_bonus_xp), 0) FROM training_judgments WHERE choice != 'skip'")
+    fun totalXpFlow(): Flow<Int>
 }
 
 data class ChoiceCount(val choice: String, val count: Int)

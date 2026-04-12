@@ -56,5 +56,17 @@ data class TrainingJudgment(
     val rightConfidence: Float?,
 
     @ColumnInfo(name = "created_at_ms")
-    val createdAtMs: Long
+    val createdAtMs: Long,
+
+    /** XP awarded for this judgment (0 for skip; computed at submit time). */
+    @ColumnInfo(name = "xp_awarded")
+    val xpAwarded: Int = 0,
+
+    /** True if this judgment closed a set of [SET_SIZE] pairs. Used for UI history. */
+    @ColumnInfo(name = "set_complete")
+    val setComplete: Boolean = false,
+
+    /** Bonus XP from set completion (0 unless [setComplete] is true). */
+    @ColumnInfo(name = "set_bonus_xp")
+    val setBonusXp: Int = 0
 )

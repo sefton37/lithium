@@ -164,7 +164,9 @@ interface NotificationDao {
      */
     @Query(
         "SELECT * FROM notifications " +
-        "WHERE tier > 0 AND id NOT IN (:excludeIds) " +
+        "WHERE tier > 0 AND is_ongoing = 0 " +
+        "  AND (title IS NOT NULL OR text IS NOT NULL) " +
+        "  AND id NOT IN (:excludeIds) " +
         "ORDER BY " +
         "  CASE WHEN ai_classification IS NULL THEN 0.0 " +
         "       ELSE ABS(ai_confidence - 0.5) END ASC, " +
@@ -172,6 +174,17 @@ interface NotificationDao {
         "LIMIT :limit"
     )
     suspend fun getAmbiguousCandidates(limit: Int, excludeIds: List<Long>): List<NotificationRecord>
+
+    /**
+     * Total count of eligible training candidates in the DB. Used to compute
+     * the dynamic level ladder (max achievable XP scales with this count).
+     */
+    @Query(
+        "SELECT COUNT(*) FROM notifications " +
+        "WHERE tier > 0 AND is_ongoing = 0 " +
+        "  AND (title IS NOT NULL OR text IS NOT NULL)"
+    )
+    fun countAmbiguityPoolFlow(): kotlinx.coroutines.flow.Flow<Int>
 
     /**
      * Per-(package, tier_reason) aggregation for tier ≤ [maxTier], since [sinceMs].
