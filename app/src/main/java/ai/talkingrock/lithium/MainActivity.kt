@@ -170,7 +170,15 @@ private fun LithiumNavHost(startDestination: String = Screen.Setup.route) {
             }
 
             composable(Screen.Training.route) {
-                ai.talkingrock.lithium.ui.training.TrainingScreen()
+                ai.talkingrock.lithium.ui.training.TrainingScreen(
+                    onOpenReport = { navController.navigate(Screen.TrainingReport.route) }
+                )
+            }
+
+            composable(Screen.TrainingReport.route) {
+                ai.talkingrock.lithium.ui.training.TrainingReportScreen(
+                    onBack = { navController.popBackStack() }
+                )
             }
 
             // Debug log — only reachable in debug builds.
@@ -265,5 +273,6 @@ sealed class Screen(val route: String) {
     object AddRule  : Screen("add_rule")
     object Settings : Screen("settings")
     object Training : Screen("training")
+    object TrainingReport : Screen("training_report")
     object DebugLog : Screen("debug_log")
 }

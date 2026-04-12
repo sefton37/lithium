@@ -40,6 +40,19 @@ interface TrainingJudgmentDao {
     /** Cumulative XP (per-judgment XP + set bonuses) — all non-skip rows. */
     @Query("SELECT COALESCE(SUM(xp_awarded + set_bonus_xp), 0) FROM training_judgments WHERE choice != 'skip'")
     fun totalXpFlow(): Flow<Int>
+
+    /** XP per quest_id (non-skip rows). Used by quest chips + report screen. */
+    @Query(
+        "SELECT quest_id, COALESCE(SUM(xp_awarded + set_bonus_xp), 0) AS xp " +
+        "FROM training_judgments WHERE choice != 'skip' GROUP BY quest_id"
+    )
+    fun xpByQuestFlow(): Flow<List<QuestXp>>
 }
+
+/** Projection for xpByQuestFlow. */
+data class QuestXp(
+    @androidx.room.ColumnInfo(name = "quest_id") val questId: String,
+    val xp: Int
+)
 
 data class ChoiceCount(val choice: String, val count: Int)

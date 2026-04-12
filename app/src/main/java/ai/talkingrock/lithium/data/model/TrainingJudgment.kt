@@ -68,5 +68,9 @@ data class TrainingJudgment(
 
     /** Bonus XP from set completion (0 unless [setComplete] is true). */
     @ColumnInfo(name = "set_bonus_xp")
-    val setBonusXp: Int = 0
+    val setBonusXp: Int = 0,
+
+    /** Id of the active Quest when this judgment was recorded ("free_play" if none). */
+    @ColumnInfo(name = "quest_id")
+    val questId: String = "free_play"
 )

@@ -42,7 +42,7 @@ import ai.talkingrock.lithium.data.model.TrainingJudgment
         AppBehaviorProfile::class,
         TrainingJudgment::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = true
 )
 abstract class LithiumDatabase : RoomDatabase() {

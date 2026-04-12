@@ -176,6 +176,20 @@ interface NotificationDao {
     suspend fun getAmbiguousCandidates(limit: Int, excludeIds: List<Long>): List<NotificationRecord>
 
     /**
+     * Same ordering as [getAmbiguousCandidates] but restricted to rows where
+     * ai_classification IS NULL. Used by the "Label the Unknown" quest.
+     */
+    @Query(
+        "SELECT * FROM notifications " +
+        "WHERE tier > 0 AND is_ongoing = 0 AND ai_classification IS NULL " +
+        "  AND (title IS NOT NULL OR text IS NOT NULL) " +
+        "  AND id NOT IN (:excludeIds) " +
+        "ORDER BY RANDOM() " +
+        "LIMIT :limit"
+    )
+    suspend fun getUnclassifiedCandidates(limit: Int, excludeIds: List<Long>): List<NotificationRecord>
+
+    /**
      * Total count of eligible training candidates in the DB. Used to compute
      * the dynamic level ladder (max achievable XP scales with this count).
      */

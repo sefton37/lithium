@@ -149,6 +149,16 @@ object DatabaseModule {
      * Existing rows get xp_awarded=0, set_complete=false, set_bonus_xp=0
      * (consistent with skipped-rows semantics; they contribute nothing to totals).
      */
+    /**
+     * Migration 6 → 7 adds the quest_id column to training_judgments, with
+     * default 'free_play' so existing judgments stay valid.
+     */
+    val MIGRATION_6_7 = object : Migration(6, 7) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE training_judgments ADD COLUMN quest_id TEXT NOT NULL DEFAULT 'free_play'")
+        }
+    }
+
     val MIGRATION_5_6 = object : Migration(5, 6) {
         override fun migrate(db: SupportSQLiteDatabase) {
             db.execSQL("ALTER TABLE training_judgments ADD COLUMN xp_awarded INTEGER NOT NULL DEFAULT 0")
@@ -266,7 +276,10 @@ object DatabaseModule {
         )
             .openHelperFactory(factory)
             .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+            .addMigrations(
+                MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4,
+                MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7
+            )
             // No fallback destructive migration — force explicit migrations.
             // If a migration is missing, the app crashes loudly rather than
             // silently wiping user data.

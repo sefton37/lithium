@@ -1,8 +1,10 @@
 package ai.talkingrock.lithium.ui.training
 
+import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import ai.talkingrock.lithium.data.db.NotificationDao
+import ai.talkingrock.lithium.data.db.QuestXp
 import ai.talkingrock.lithium.data.db.TrainingJudgmentDao
 import ai.talkingrock.lithium.data.model.NotificationRecord
 import ai.talkingrock.lithium.data.model.TrainingJudgment
@@ -15,43 +17,37 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 import javax.inject.Inject
 
-/** What the Training screen needs to render. */
+/** Screen state for the Training tab. */
 data class TrainingUiState(
     val left: NotificationRecord? = null,
     val right: NotificationRecord? = null,
     val isLoading: Boolean = true,
-    /** True when the candidate pool is too small to form a pair. */
     val exhausted: Boolean = false,
-    /** 0..SET_SIZE-1 — position within the current set. */
-    val setPosition: Int = 0
+    val setPosition: Int = 0,
+    /** Non-null while the battle animation for the last judgment is playing. */
+    val lastBattle: BattleOutcome? = null
 )
 
-/** Event emitted after each judgment, consumed by the screen for animations. */
+/** Outcome of the most recent judgment, drives the smash animation. */
+enum class BattleOutcome { LEFT_WINS, RIGHT_WINS, TIE, SKIPPED }
+
 sealed class XpEvent {
     data class Judgment(val xp: Int) : XpEvent()
     data class SetComplete(val bonusXp: Int, val totalSetXp: Int) : XpEvent()
+    data class QuestComplete(val quest: Quest, val totalXp: Int) : XpEvent()
 }
 
-/**
- * ViewModel for the Training tab.
- *
- * Produces ambiguous pairs, scores each judgment, accumulates XP into the
- * current set, and awards a set-completion bonus every [SET_SIZE] pairs
- * (skips don't count toward the set — they're filtered out).
- *
- * Level progression is dynamic: the total ambiguity pool in the DB defines
- * the "max achievable XP" and the level ladder is percentage-based against
- * that estimate. As your notification history grows, so does the ceiling.
- */
 @HiltViewModel
 class TrainingViewModel @Inject constructor(
     private val notificationDao: NotificationDao,
-    private val judgmentDao: TrainingJudgmentDao
+    private val judgmentDao: TrainingJudgmentDao,
+    private val sharedPreferences: SharedPreferences
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(TrainingUiState())
@@ -60,45 +56,56 @@ class TrainingViewModel @Inject constructor(
     private val _xpEvents = MutableSharedFlow<XpEvent>(replay = 0, extraBufferCapacity = 4)
     val xpEvents: SharedFlow<XpEvent> = _xpEvents.asSharedFlow()
 
-    /** Accumulated XP within the current (not-yet-completed) set. */
+    private val _activeQuest = MutableStateFlow(
+        Quests.byId(sharedPreferences.getString(PREF_ACTIVE_QUEST, null))
+    )
+    val activeQuest: StateFlow<Quest> = _activeQuest.asStateFlow()
+
+    /** XP per quest id. Key is questId, value is XP. */
+    val questXp: StateFlow<Map<String, Int>> = judgmentDao.xpByQuestFlow()
+        .map { it.associate { row -> row.questId to row.xp } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
+
     private var setXpAccumulator = 0
-    /** Non-skip judgments counted toward the current set (0..SET_SIZE). */
     private var setCompletedInThisRun = 0
 
-    /** Reactive snapshot combining total XP and the dynamic pool-sized ladder. */
-    val trainer: StateFlow<TrainerSnapshot> = combine(
-        judgmentDao.totalXpFlow(),
-        notificationDao.countAmbiguityPoolFlow()
-    ) { xp, poolSize ->
-        TrainerLevels.snapshot(
-            xp = xp,
-            totalAchievable = poolSize * AVG_XP_PER_JUDGMENT
-        )
-    }.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5_000),
-        initialValue = TrainerLevels.snapshot(xp = 0, totalAchievable = 0)
-    )
+    /** Trainer snapshot driven by total XP. */
+    val trainer: StateFlow<TrainerSnapshot> = judgmentDao.totalXpFlow()
+        .map { TrainerLevels.snapshot(it) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TrainerLevels.snapshot(0))
 
     val judgmentCount: StateFlow<Int> = judgmentDao.countFlow()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
     init { loadNextPair() }
 
+    /** Change the active quest. Resets current-set progress for cleaner feedback. */
+    fun selectQuest(questId: String) {
+        val q = Quests.byId(questId)
+        _activeQuest.value = q
+        sharedPreferences.edit().putString(PREF_ACTIVE_QUEST, q.id).apply()
+        setXpAccumulator = 0
+        setCompletedInThisRun = 0
+        _uiState.value = _uiState.value.copy(setPosition = 0)
+        loadNextPair()
+    }
+
     fun submit(choice: String) {
         val state = _uiState.value
         val left = state.left ?: return
         val right = state.right ?: return
+        val quest = _activeQuest.value
 
         viewModelScope.launch {
             val xp = computeXpForJudgment(choice, left, right)
             val isRealJudgment = choice != "skip"
 
-            // Figure out set bookkeeping before persisting — so set_complete
-            // is known at insert time.
             val willCompleteSet = isRealJudgment && (setCompletedInThisRun + 1) == SET_SIZE
             val pendingSetXp = if (willCompleteSet) setXpAccumulator + xp else 0
             val bonus = if (willCompleteSet) (pendingSetXp * SET_BONUS_MULTIPLIER).roundToInt() else 0
+
+            // Capture quest XP BEFORE insert so we can detect quest-complete transition.
+            val questXpBefore = questXp.value[quest.id] ?: 0
 
             judgmentDao.insert(
                 TrainingJudgment(
@@ -116,26 +123,46 @@ class TrainingViewModel @Inject constructor(
                     createdAtMs = System.currentTimeMillis(),
                     xpAwarded = xp,
                     setComplete = willCompleteSet,
-                    setBonusXp = bonus
+                    setBonusXp = bonus,
+                    questId = quest.id
                 )
             )
 
-            // Emit per-judgment XP event for the floating "+N XP" animation.
             if (xp > 0) _xpEvents.emit(XpEvent.Judgment(xp))
+            if (willCompleteSet) {
+                _xpEvents.emit(XpEvent.SetComplete(bonus, pendingSetXp))
+            }
 
-            // Advance set state.
+            // Quest complete event — fires once when crossing the goal threshold.
+            if (quest.goalXp > 0 && quest != Quests.FREE_PLAY) {
+                val questXpAfter = questXpBefore + xp + bonus
+                if (questXpBefore < quest.goalXp && questXpAfter >= quest.goalXp) {
+                    _xpEvents.emit(XpEvent.QuestComplete(quest, questXpAfter))
+                }
+            }
+
             if (isRealJudgment) {
                 setXpAccumulator += xp
                 setCompletedInThisRun += 1
                 if (willCompleteSet) {
-                    _xpEvents.emit(XpEvent.SetComplete(bonusXp = bonus, totalSetXp = pendingSetXp))
                     setXpAccumulator = 0
                     setCompletedInThisRun = 0
                 }
             }
-            // Skips don't count toward the set — user couldn't judge.
 
-            _uiState.value = _uiState.value.copy(setPosition = setCompletedInThisRun)
+            _uiState.value = _uiState.value.copy(
+                setPosition = setCompletedInThisRun,
+                lastBattle = when (choice) {
+                    "left" -> BattleOutcome.LEFT_WINS
+                    "right" -> BattleOutcome.RIGHT_WINS
+                    "tie" -> BattleOutcome.TIE
+                    else -> BattleOutcome.SKIPPED
+                }
+            )
+
+            // Let the animation play for BATTLE_DURATION_MS before loading the next pair.
+            kotlinx.coroutines.delay(BATTLE_DURATION_MS)
+            _uiState.value = _uiState.value.copy(lastBattle = null)
             loadNextPair()
         }
     }
@@ -144,20 +171,31 @@ class TrainingViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true)
             val excluded = judgmentDao.getJudgedNotificationIds()
-            val pool = notificationDao.getAmbiguousCandidates(
-                limit = CANDIDATE_POOL_SIZE,
-                excludeIds = if (excluded.isEmpty()) listOf(-1L) else excluded
-            )
-            if (pool.size < 2) {
+            val quest = _activeQuest.value
+            val raw = if (quest.onlyUnclassified) {
+                notificationDao.getUnclassifiedCandidates(
+                    limit = CANDIDATE_POOL_SIZE,
+                    excludeIds = if (excluded.isEmpty()) listOf(-1L) else excluded
+                )
+            } else {
+                notificationDao.getAmbiguousCandidates(
+                    limit = CANDIDATE_POOL_SIZE,
+                    excludeIds = if (excluded.isEmpty()) listOf(-1L) else excluded
+                )
+            }
+            val filtered = if (quest.packagePrefixes.isEmpty()) raw
+            else raw.filter { row -> quest.packagePrefixes.any { row.packageName.startsWith(it) } }
+
+            if (filtered.size < 2) {
                 _uiState.value = _uiState.value.copy(
                     left = null, right = null,
                     isLoading = false, exhausted = true
                 )
                 return@launch
             }
-            val first = pool.first()
-            val second = pool.drop(1).firstOrNull { it.packageName != first.packageName }
-                ?: pool[1]
+            val first = filtered.first()
+            val second = filtered.drop(1).firstOrNull { it.packageName != first.packageName }
+                ?: filtered[1]
             _uiState.value = _uiState.value.copy(
                 left = first, right = second,
                 isLoading = false, exhausted = false
@@ -167,5 +205,8 @@ class TrainingViewModel @Inject constructor(
 
     companion object {
         private const val CANDIDATE_POOL_SIZE = 40
+        private const val PREF_ACTIVE_QUEST = "training_active_quest"
+        /** How long the battle animation runs before the next pair loads. */
+        const val BATTLE_DURATION_MS = 650L
     }
 }
