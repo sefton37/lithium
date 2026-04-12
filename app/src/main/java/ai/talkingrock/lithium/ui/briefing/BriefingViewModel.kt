@@ -74,13 +74,21 @@ class BriefingViewModel @Inject constructor(
 
     private val workManager = WorkManager.getInstance(context)
 
-    /** Emits true while either the periodic or manual analysis worker is active. */
+    /**
+     * Emits true while analysis is actively in flight.
+     *
+     * Periodic work sits in ENQUEUED state perpetually between its 24h firings,
+     * so we only treat it as "running" when it's actually RUNNING. The manual
+     * one-shot is treated as running from ENQUEUED onward — that covers the
+     * brief window between tapping "Run Now" and the worker thread starting.
+     */
     @OptIn(ExperimentalCoroutinesApi::class)
     private val analysisRunningFlow = kotlinx.coroutines.flow.combine(
         workManager.getWorkInfosForUniqueWorkFlow(AiAnalysisWorker.WORK_NAME),
         workManager.getWorkInfosForUniqueWorkFlow(WorkScheduler.MANUAL_WORK_NAME)
     ) { periodic, manual ->
-        (periodic + manual).any {
+        periodic.any { it.state == WorkInfo.State.RUNNING } ||
+        manual.any {
             it.state == WorkInfo.State.RUNNING || it.state == WorkInfo.State.ENQUEUED
         }
     }
