@@ -30,6 +30,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -255,13 +256,14 @@ private fun UnmappedPatternsCard(patterns: List<PatternStat>) {
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            val ctx = LocalContext.current
             patterns.forEach { p ->
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = "${ai.talkingrock.lithium.ai.AppNames.friendlyName(p.packageName)} · ${p.tierReason}",
+                        text = "${ai.talkingrock.lithium.ai.AppNames.displayName(ctx, p.packageName)} · ${p.tierReason}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface
                     )

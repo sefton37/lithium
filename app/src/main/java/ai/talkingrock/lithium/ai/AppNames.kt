@@ -1,10 +1,31 @@
 package ai.talkingrock.lithium.ai
 
+import android.content.Context
+import android.content.pm.PackageManager
+
 /**
  * Shared mapping of Android package names to human-readable app names.
  * Used by [ReportGenerator] and [SuggestionGenerator].
  */
 object AppNames {
+
+    /**
+     * Returns the label Android shows for [packageName] in the launcher /
+     * app drawer — the authoritative source. Falls back to [friendlyName]
+     * if the package is not installed or the label lookup fails (which is
+     * safe behavior on reports that still reference uninstalled apps).
+     */
+    fun displayName(context: Context, packageName: String): String = try {
+        val pm = context.packageManager
+        val info = pm.getApplicationInfo(packageName, 0)
+        val label = info.loadLabel(pm).toString()
+        if (label.isBlank()) friendlyName(packageName) else label
+    } catch (_: PackageManager.NameNotFoundException) {
+        friendlyName(packageName)
+    } catch (_: Exception) {
+        friendlyName(packageName)
+    }
+
 
     private val KNOWN_NAMES = mapOf(
         // Social media

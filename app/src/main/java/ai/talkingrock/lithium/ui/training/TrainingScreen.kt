@@ -459,7 +459,7 @@ private fun AppBattleCard(
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "$label · ${AppNames.friendlyName(packageName)}",
+                    text = "$label · ${AppNames.displayName(context, packageName)}",
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.onSurface
                 )
@@ -537,7 +537,7 @@ private fun BattleCard(label: String, record: NotificationRecord, state: CardBat
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "$label · ${AppNames.friendlyName(record.packageName)}",
+                    text = "$label · ${AppNames.displayName(LocalContext.current, record.packageName)}",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary
                 )
