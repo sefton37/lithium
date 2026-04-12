@@ -4,8 +4,10 @@ import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import ai.talkingrock.lithium.data.Prefs
+import ai.talkingrock.lithium.data.db.TierCount
 import ai.talkingrock.lithium.data.model.Report
 import ai.talkingrock.lithium.data.model.Suggestion
+import ai.talkingrock.lithium.data.repository.NotificationRepository
 import ai.talkingrock.lithium.data.repository.ReportRepository
 import ai.talkingrock.lithium.data.repository.RuleRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -37,7 +39,9 @@ data class BriefingUiState(
     val commentDrafts: Map<Long, String> = emptyMap(),
     val expandedCommentId: Long? = null,
     /** True when enough data has been collected for meaningful recommendations. */
-    val dataReady: Boolean = false
+    val dataReady: Boolean = false,
+    /** Tier counts for the last 24 hours, indexed by tier 0..3. Zeros when no data. */
+    val tierBreakdown24h: Map<Int, Int> = emptyMap()
 )
 
 /**
@@ -55,11 +59,16 @@ data class BriefingUiState(
 class BriefingViewModel @Inject constructor(
     private val reportRepository: ReportRepository,
     private val ruleRepository: RuleRepository,
+    private val notificationRepository: NotificationRepository,
     private val sharedPreferences: SharedPreferences
 ) : ViewModel() {
 
     // Ephemeral UI state for comment expansion and drafts — not persisted.
     private val _uiExtras = MutableStateFlow(UiExtras())
+
+    /** Last 24 hours of tier counts, keyed by tier (0..3). Empty until first emission. */
+    private val tierBreakdownFlow = notificationRepository
+        .getTierBreakdownSince(System.currentTimeMillis() - 24L * 60L * 60L * 1000L)
 
     private val dataReady: Boolean
         get() = sharedPreferences.getBoolean(Prefs.DATA_READY_NOTIFIED, false)
@@ -68,27 +77,25 @@ class BriefingViewModel @Inject constructor(
     val uiState: StateFlow<BriefingUiState> = reportRepository
         .getLatestUnreviewed()
         .flatMapLatest { report ->
-            if (report == null) {
-                flowOf(BriefingUiState(
-                    report = null, suggestions = emptyList(),
-                    isLoading = false, dataReady = dataReady
-                ))
+            val reportWithSuggestions = if (report == null) {
+                flowOf(Pair<Report?, List<Suggestion>>(null, emptyList()))
             } else {
                 reportRepository.getPendingForReport(report.id)
-                    .combine(flowOf(report)) { suggestions, r ->
-                        Pair(r, suggestions)
-                    }
-                    .combine(_uiExtras) { (r, suggestions), extras ->
-                        BriefingUiState(
-                            report = r,
-                            suggestions = suggestions,
-                            isLoading = false,
-                            commentDrafts = extras.commentDrafts,
-                            expandedCommentId = extras.expandedCommentId,
-                            dataReady = dataReady
-                        )
-                    }
+                    .combine(flowOf(report)) { suggestions, r -> Pair(r as Report?, suggestions) }
             }
+            reportWithSuggestions
+                .combine(_uiExtras) { rs, extras -> Triple(rs.first, rs.second, extras) }
+                .combine(tierBreakdownFlow) { triple, tierCounts ->
+                    BriefingUiState(
+                        report = triple.first,
+                        suggestions = triple.second,
+                        isLoading = false,
+                        commentDrafts = triple.third.commentDrafts,
+                        expandedCommentId = triple.third.expandedCommentId,
+                        dataReady = dataReady,
+                        tierBreakdown24h = tierCounts.associate { it.tier to it.count }
+                    )
+                }
         }
         .stateIn(
             scope = viewModelScope,

@@ -1,6 +1,7 @@
 package ai.talkingrock.lithium.data.repository
 
 import ai.talkingrock.lithium.data.db.NotificationDao
+import ai.talkingrock.lithium.data.db.TierCount
 import ai.talkingrock.lithium.data.model.NotificationRecord
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -63,6 +64,10 @@ class NotificationRepository @Inject constructor(
     suspend fun getCount(): Int = withContext(Dispatchers.IO) {
         dao.count()
     }
+
+    /** Reactive tier counts for notifications posted since [sinceMs]. */
+    fun getTierBreakdownSince(sinceMs: Long): Flow<List<TierCount>> =
+        dao.getTierBreakdownSince(sinceMs)
 
     /** Delete all notification records. Used by purge-all-data. */
     suspend fun deleteAll() = withContext(Dispatchers.IO) {

@@ -121,6 +121,10 @@ interface NotificationDao {
     @Query("SELECT tier, COUNT(*) AS count FROM notifications GROUP BY tier ORDER BY tier ASC")
     suspend fun getTierBreakdown(): List<TierCount>
 
+    /** Tier counts since [sinceMs]. Used by the briefing screen's 24-hour summary. */
+    @Query("SELECT tier, COUNT(*) AS count FROM notifications WHERE posted_at_ms >= :sinceMs GROUP BY tier ORDER BY tier ASC")
+    fun getTierBreakdownSince(sinceMs: Long): kotlinx.coroutines.flow.Flow<List<TierCount>>
+
     /**
      * Returns the next batch of rows with no tier_reason set.
      * Rows created before the v3→v4 migration got tier=2 and tier_reason=NULL;

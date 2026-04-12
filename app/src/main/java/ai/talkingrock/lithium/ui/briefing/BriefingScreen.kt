@@ -142,6 +142,11 @@ private fun ReportContent(
             color = MaterialTheme.colorScheme.onBackground
         )
 
+        // 24-hour tier breakdown
+        if (uiState.tierBreakdown24h.isNotEmpty()) {
+            TierBreakdownCard(counts = uiState.tierBreakdown24h)
+        }
+
         // Report text
         Card(
             modifier = Modifier.fillMaxWidth(),
@@ -276,6 +281,59 @@ private fun SuggestionCard(
                 }
             }
         }
+    }
+}
+
+/**
+ * Compact per-tier count card: "Last 24 hours" with four labeled counts.
+ * Tiers not present in [counts] render as 0.
+ */
+@Composable
+private fun TierBreakdownCard(counts: Map<Int, Int>) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "Last 24 hours",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                TierCell("Interrupt", counts[3] ?: 0, MaterialTheme.colorScheme.error)
+                TierCell("Worth",     counts[2] ?: 0, MaterialTheme.colorScheme.primary)
+                TierCell("Noise",     counts[1] ?: 0, MaterialTheme.colorScheme.onSurfaceVariant)
+                TierCell("Invisible", counts[0] ?: 0, MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+@Composable
+private fun TierCell(label: String, count: Int, color: androidx.compose.ui.graphics.Color) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = count.toString(),
+            style = MaterialTheme.typography.headlineSmall,
+            color = color
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
