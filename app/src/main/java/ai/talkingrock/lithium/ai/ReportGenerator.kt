@@ -24,7 +24,9 @@ import javax.inject.Singleton
  *   4. A notable pattern if one exists (e.g. high send / low tap ratio on an app).
  */
 @Singleton
-class ReportGenerator @Inject constructor() {
+class ReportGenerator @Inject constructor(
+    private val appLabels: AppLabelResolver
+) {
 
     /**
      * Builds a [Report] entity from pre-aggregated [PatternAnalyzer] outputs.
@@ -256,9 +258,9 @@ class ReportGenerator @Inject constructor() {
         NotificationCategory.UNKNOWN         -> "uncategorised"
     }
 
-    /** Delegates to shared [AppNames.friendlyName]. */
+    /** Uses the injected resolver so report text matches launcher labels. */
     internal fun friendlyName(packageName: String): String =
-        AppNames.friendlyName(packageName)
+        appLabels.label(packageName)
 
     companion object {
         /** Minimum notification count for an app to appear in the "top apps" sentence. */

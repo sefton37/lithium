@@ -24,7 +24,9 @@ import javax.inject.Singleton
  * for the rule engine if the user accepts.
  */
 @Singleton
-class SuggestionGenerator @Inject constructor() {
+class SuggestionGenerator @Inject constructor(
+    private val appLabels: AppLabelResolver
+) {
 
     /**
      * Backwards-compatible overload without profiles. Uses 24h data only.
@@ -291,9 +293,9 @@ class SuggestionGenerator @Inject constructor() {
         .filter { it.packageName == packageName }
         .none { it.isFromContact }
 
-    /** Delegates to shared [AppNames.friendlyName]. */
+    /** Uses the injected resolver so suggestion text matches launcher labels. */
     private fun friendlyName(packageName: String): String =
-        AppNames.friendlyName(packageName)
+        appLabels.label(packageName)
 
     companion object {
         /** Minimum total notifications from an app to consider generating a suggestion. */
