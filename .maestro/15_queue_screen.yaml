@@ -10,11 +10,13 @@ appId: ai.talkingrock.lithium.debug
 - waitForAnimationToEnd
 - launchApp
 
-# Wait for main screen (Briefing tab is default)
+# Wait for main screen (Briefing tab is default).
+# Longer timeout because this flow may run after 07_run_analysis triggered
+# llama.cpp inference; the device can be CPU-saturated on cold launch.
 - extendedWaitUntil:
     visible:
       text: "Briefing"
-    timeout: 15000
+    timeout: 30000
 
 # Navigate to the Queue tab
 - tapOn: "Queue"

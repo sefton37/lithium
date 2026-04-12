@@ -8,7 +8,9 @@ import ai.talkingrock.lithium.data.db.NotificationDao
 import ai.talkingrock.lithium.data.db.QueueDao
 import ai.talkingrock.lithium.data.db.ReportDao
 import ai.talkingrock.lithium.data.db.SessionDao
+import ai.talkingrock.lithium.data.db.ShadeModeSeeder
 import ai.talkingrock.lithium.data.db.SuggestionDao
+import ai.talkingrock.lithium.data.repository.ShadeModeRepository
 import ai.talkingrock.lithium.service.ListenerState
 import ai.talkingrock.lithium.ui.training.MainDispatcherRule
 import app.cash.turbine.test
@@ -20,6 +22,7 @@ import io.mockk.just
 import io.mockk.mockk
 import io.mockk.mockkStatic
 import io.mockk.verify
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -57,6 +60,8 @@ class SettingsViewModelTest {
     private lateinit var suggestionDao: SuggestionDao
     private lateinit var queueDao: QueueDao
     private lateinit var behaviorProfileDao: AppBehaviorProfileDao
+    private lateinit var shadeModeRepository: ShadeModeRepository
+    private lateinit var shadeModeSeeder: ShadeModeSeeder
     private lateinit var workManager: WorkManager
 
     @Before
@@ -70,6 +75,9 @@ class SettingsViewModelTest {
         suggestionDao = mockk()
         queueDao = mockk()
         behaviorProfileDao = mockk()
+        shadeModeRepository = mockk(relaxed = true)
+        every { shadeModeRepository.isEnabled } returns MutableStateFlow(false)
+        shadeModeSeeder = mockk(relaxed = true)
         workManager = mockk(relaxed = true)
 
         mockkStatic(WorkManager::class)
@@ -91,7 +99,8 @@ class SettingsViewModelTest {
         return SettingsViewModel(
             context, listenerState, sharedPrefs,
             notificationDao, sessionDao, reportDao,
-            suggestionDao, queueDao, behaviorProfileDao
+            suggestionDao, queueDao, behaviorProfileDao,
+            shadeModeRepository, shadeModeSeeder
         )
     }
 
@@ -242,6 +251,53 @@ class SettingsViewModelTest {
 
         assertTrue("notificationAccessGranted should be true when listener connected",
             vm.uiState.value.notificationAccessGranted)
+    }
+
+    // ── Shade Mode access guard (fix #8) ─────────────────────────────────────
+
+    @Test
+    fun `setShadeModeEnabled true is blocked when notification access not granted`() = runTest {
+        // listenerState is NOT connected (default)
+        val vm = makeViewModel()
+        advanceUntilIdle()
+
+        vm.snackbarMessages.test {
+            vm.setShadeModeEnabled(true)
+            advanceUntilIdle()
+
+            val msg = awaitItem()
+            assertTrue("Snackbar must guide user to grant notification access",
+                msg.contains("notification access", ignoreCase = true))
+
+            // Repository must NOT have been called
+            verify(exactly = 0) { shadeModeRepository.setEnabled(true) }
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `setShadeModeEnabled true proceeds when notification access is granted`() = runTest {
+        listenerState.onConnected()
+
+        val vm = makeViewModel()
+        advanceUntilIdle()
+
+        vm.setShadeModeEnabled(true)
+        advanceUntilIdle()
+
+        verify(exactly = 1) { shadeModeRepository.setEnabled(true) }
+    }
+
+    @Test
+    fun `setShadeModeEnabled false always proceeds regardless of notification access`() = runTest {
+        // Disable should always work — no access check needed for turning OFF
+        val vm = makeViewModel()
+        advanceUntilIdle()
+
+        vm.setShadeModeEnabled(false)
+        advanceUntilIdle()
+
+        verify(exactly = 1) { shadeModeRepository.setEnabled(false) }
     }
 
     @Test

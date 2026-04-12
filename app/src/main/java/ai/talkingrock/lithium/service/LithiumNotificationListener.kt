@@ -1,20 +1,25 @@
 package ai.talkingrock.lithium.service
 
 import android.app.Notification
-import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.ComponentName
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.room.withTransaction
+import ai.talkingrock.lithium.data.db.LithiumDatabase
+import ai.talkingrock.lithium.data.db.QueueDao
 import ai.talkingrock.lithium.data.model.NotificationRecord
+import ai.talkingrock.lithium.data.model.QueuedNotification
 import ai.talkingrock.lithium.data.repository.NotificationRepository
 import ai.talkingrock.lithium.data.repository.SessionRepository
+import ai.talkingrock.lithium.data.repository.ShadeModeRepository
 import ai.talkingrock.lithium.classification.TierClassifier
 import ai.talkingrock.lithium.engine.ContactsResolver
 import ai.talkingrock.lithium.engine.RuleAction
 import ai.talkingrock.lithium.engine.RuleEngine
+import ai.talkingrock.lithium.engine.SafetyAllowlist
 import ai.talkingrock.lithium.engine.UsageTracker
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
@@ -23,6 +28,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 
 /**
@@ -54,12 +60,17 @@ class LithiumNotificationListener : NotificationListenerService() {
     @Inject lateinit var listenerState: ListenerState
     @Inject lateinit var contactsResolver: ContactsResolver
     @Inject lateinit var usageTracker: UsageTracker
+    @Inject lateinit var shadeModeRepository: ShadeModeRepository
+    @Inject lateinit var queueDao: QueueDao
+    @Inject lateinit var notificationResurface: NotificationResurface
+    @Inject lateinit var database: LithiumDatabase
 
     private lateinit var serviceScope: CoroutineScope
 
     // In-memory map of notification key -> database row ID, used to update removal records.
     // Keyed by the SBN key (package:id:tag) which is stable within a process lifetime.
-    private val keyToRowId = mutableMapOf<String, Long>()
+    // ConcurrentHashMap: written from IO coroutine, read from main thread in onNotificationRemoved.
+    private val keyToRowId = ConcurrentHashMap<String, Long>()
 
     override fun onCreate() {
         super.onCreate()
@@ -87,25 +98,95 @@ class LithiumNotificationListener : NotificationListenerService() {
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
-        val record = buildRecord(sbn)
-
-        // Async DB write — must not block the callback thread.
-        serviceScope.launch {
-            val rowId = notificationRepo.insert(record)
-            keyToRowId[sbn.key] = rowId
+        // --- Safety allowlist: checked FIRST, before shade-mode gate or rule evaluation ---
+        if (SafetyAllowlist.isSafetyExempt(sbn)) {
+            val record = buildRecord(sbn, disposition = "safety_exempt")
+            serviceScope.launch {
+                val rowId = notificationRepo.insert(record)
+                keyToRowId[sbn.key] = rowId
+            }
+            return
         }
 
-        // Rule evaluation is synchronous and in-memory.
+        // --- Shade mode gate: if disabled, observe only — no cancellations ---
+        if (!shadeModeRepository.isEnabled.value) {
+            val record = buildRecord(sbn, disposition = "allowed")
+            serviceScope.launch {
+                val rowId = notificationRepo.insert(record)
+                keyToRowId[sbn.key] = rowId
+            }
+            return
+        }
+
+        // --- Active shade mode: evaluate rules ---
+        val record = buildRecord(sbn)
+        // Extract SBN fields needed by NotificationResurface before launching the coroutine.
+        // StatusBarNotification may be recycled by the framework after onNotificationPosted returns
+        // (fix #9 — safe extraction on main thread).
+        val sbnKey = sbn.key
+        val sbnPkg = sbn.packageName
+        val sbnExtras = sbn.notification.extras
+        val sbnOriginalTitle = sbnExtras.getCharSequence(Notification.EXTRA_TITLE)?.toString()
+        val sbnOriginalText = sbnExtras.getCharSequence(Notification.EXTRA_TEXT)?.toString()
+        val sbnOriginalId = sbn.id
+
         when (ruleEngine.evaluate(record)) {
             RuleAction.SUPPRESS -> {
-                cancelNotification(sbn.key)
+                // Fix #1: insert DB record BEFORE cancelling the notification. Avoids the
+                // window where the notification is removed from the shade but absent from DB.
+                val suppressed = record.copy(disposition = "suppressed")
+                serviceScope.launch {
+                    val rowId = notificationRepo.insert(suppressed)
+                    keyToRowId[sbnKey] = rowId
+                    cancelNotification(sbnKey)
+                }
             }
             RuleAction.QUEUE -> {
-                cancelNotification(sbn.key)
-                // Enqueuing happens in M2 when QueuedNotification is wired in.
-                // For M1, the record is already in the DB; the queue write is a no-op placeholder.
+                // Fix #1: wrap both inserts in a single Room transaction, then cancel.
+                // Crash between insert and cancel → notification reappears in shade (safe failure).
+                // Crash between inserts (without transaction) → orphaned notification record (silent loss).
+                val queued = record.copy(disposition = "queued")
+                serviceScope.launch {
+                    val rowId = database.withTransaction {
+                        val id = notificationRepo.insert(queued)
+                        queueDao.enqueue(
+                            QueuedNotification(
+                                notificationId = id,
+                                queuedAtMs = System.currentTimeMillis()
+                            )
+                        )
+                        id
+                    }
+                    keyToRowId[sbnKey] = rowId
+                    cancelNotification(sbnKey)
+                }
             }
-            RuleAction.ALLOW -> Unit
+            RuleAction.RESURFACE -> {
+                // Fix #1: post curated notification FIRST (shade is never empty), then insert
+                // DB record, then cancel the original. This eliminates the gap window where
+                // neither the original nor the curated notification is visible.
+                val resurfaced = record.copy(disposition = "resurfaced")
+                serviceScope.launch {
+                    notificationResurface.post(
+                        record = resurfaced,
+                        sbnKey = sbnKey,
+                        pkg = sbnPkg,
+                        originalTitle = sbnOriginalTitle,
+                        originalText = sbnOriginalText,
+                        originalId = sbnOriginalId,
+                    )
+                    val rowId = notificationRepo.insert(resurfaced)
+                    keyToRowId[sbnKey] = rowId
+                    cancelNotification(sbnKey)
+                }
+            }
+            RuleAction.ALLOW -> {
+                val allowed = record.copy(disposition = "allowed")
+                serviceScope.launch {
+                    val rowId = notificationRepo.insert(allowed)
+                    keyToRowId[sbnKey] = rowId
+                }
+            }
         }
     }
 
@@ -137,7 +218,7 @@ class LithiumNotificationListener : NotificationListenerService() {
     // Private helpers
     // -----------------------------------------------------------------------------------
 
-    private fun buildRecord(sbn: StatusBarNotification): NotificationRecord {
+    private fun buildRecord(sbn: StatusBarNotification, disposition: String? = null): NotificationRecord {
         val extras = sbn.notification.extras
         val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()
         val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()
@@ -163,6 +244,7 @@ class LithiumNotificationListener : NotificationListenerService() {
             isFromContact = isFromContact,
             tier = tier,
             tierReason = tierReason,
+            disposition = disposition,
         )
     }
 
@@ -189,27 +271,26 @@ class LithiumNotificationListener : NotificationListenerService() {
         else -> "unknown_$reason"
     }
 
-    /** Post a low-priority notification nudging the user to exempt Lithium from battery optimization. */
+    /**
+     * Posts a low-priority notification when the listener is disconnected.
+     *
+     * If Shade Mode is enabled, the nudge communicates urgency ("protection paused").
+     * Channel creation is handled by [NotificationChannelRegistry] in [LithiumApp.onCreate].
+     */
     private fun postReconnectNudge() {
-        val channelId = "lithium_system"
         val nm = getSystemService(NotificationManager::class.java)
+        val shadeModeOn = shadeModeRepository.isEnabled.value
 
-        if (nm.getNotificationChannel(channelId) == null) {
-            nm.createNotificationChannel(
-                NotificationChannel(
-                    channelId,
-                    "Lithium System",
-                    NotificationManager.IMPORTANCE_LOW
-                ).apply {
-                    description = "Service health and permission status"
-                }
-            )
+        val contentText = if (shadeModeOn) {
+            "Shade Mode is paused — tap to restore protection."
+        } else {
+            "Tap to open battery settings and add Lithium to Do Not Optimize."
         }
 
-        val notification = NotificationCompat.Builder(this, channelId)
+        val notification = NotificationCompat.Builder(this, NotificationChannelRegistry.CHANNEL_SYSTEM)
             .setSmallIcon(android.R.drawable.ic_dialog_alert)
             .setContentTitle("Lithium disconnected")
-            .setContentText("Tap to open battery settings and add Lithium to Do Not Optimize.")
+            .setContentText(contentText)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setAutoCancel(true)
             .build()

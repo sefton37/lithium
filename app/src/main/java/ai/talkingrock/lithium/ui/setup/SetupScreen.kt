@@ -59,9 +59,10 @@ import kotlinx.coroutines.launch
  * 2 — Privacy Promise: data never leaves device
  * 3 — Notification Access permission
  * 4 — Battery Optimization exemption (skippable)
- * 5 — Usage Access permission (skippable)
- * 6 — Contacts permission (optional, skippable)
- * 7 — Learning Period explanation + "Get Started"
+ * 4b (5) — Shade Ownership explanation (informational)
+ * 6 — Usage Access permission (skippable)
+ * 7 — Contacts permission (optional, skippable)
+ * 8 — Learning Period explanation + "Get Started"
  *
  * If [SetupViewModel.onboardingComplete] is true (returning user whose notification
  * access was revoked), the pager starts at the Notification Access page (index 3).
@@ -89,7 +90,7 @@ fun SetupScreen(
 
     // Returning users who lost permission skip the intro pages
     val initialPage = if (viewModel.onboardingComplete) 3 else 0
-    val pageCount = 8
+    val pageCount = 9
     val pagerState = rememberPagerState(initialPage = initialPage) { pageCount }
 
     val contactsLauncher = rememberLauncherForActivityResult(
@@ -128,7 +129,8 @@ fun SetupScreen(
                         context.startActivity(intent)
                     }
                 )
-                5 -> UsageAccessPage(
+                5 -> ShadeOwnershipPage()
+                6 -> UsageAccessPage(
                     granted = uiState.usageAccessGranted,
                     onGrant = {
                         val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).apply {
@@ -137,13 +139,13 @@ fun SetupScreen(
                         context.startActivity(intent)
                     }
                 )
-                6 -> ContactsPage(
+                7 -> ContactsPage(
                     granted = uiState.contactsGranted,
                     onGrant = {
                         contactsLauncher.launch(android.Manifest.permission.READ_CONTACTS)
                     }
                 )
-                7 -> LearningPeriodPage()
+                8 -> LearningPeriodPage()
             }
         }
 
@@ -169,7 +171,7 @@ fun SetupScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Back button (hidden on first two pages and last page)
-            if (pagerState.currentPage > 1 && pagerState.currentPage < pageCount - 1) {
+            if (pagerState.currentPage > 1 && pagerState.currentPage < pageCount - 1) {  // pageCount is now 9
                 TextButton(
                     onClick = { scope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) } }
                 ) {
@@ -217,26 +219,35 @@ fun SetupScreen(
                         Text(if (uiState.batteryOptimizationExempt) "Next" else "Skip")
                     }
                 }
-                // Usage Access — can proceed even if not granted
+                // Shade Ownership — informational only, always Next
                 5 -> {
                     Button(
                         onClick = { scope.launch { pagerState.animateScrollToPage(6) } },
+                        modifier = Modifier.defaultMinSize(minHeight = 48.dp)
+                    ) {
+                        Text("Next")
+                    }
+                }
+                // Usage Access — can proceed even if not granted
+                6 -> {
+                    Button(
+                        onClick = { scope.launch { pagerState.animateScrollToPage(7) } },
                         modifier = Modifier.defaultMinSize(minHeight = 48.dp)
                     ) {
                         Text(if (uiState.usageAccessGranted) "Next" else "Skip")
                     }
                 }
                 // Contacts — optional, skip or continue
-                6 -> {
+                7 -> {
                     Button(
-                        onClick = { scope.launch { pagerState.animateScrollToPage(7) } },
+                        onClick = { scope.launch { pagerState.animateScrollToPage(8) } },
                         modifier = Modifier.defaultMinSize(minHeight = 48.dp)
                     ) {
                         Text(if (uiState.contactsGranted) "Next" else "Skip")
                     }
                 }
                 // Learning period — final page, "Get Started"
-                7 -> {
+                8 -> {
                     Button(
                         onClick = {
                             viewModel.markOnboardingComplete()
@@ -502,6 +513,18 @@ private fun ContactsPage(granted: Boolean, onGrant: () -> Unit) {
         grantLabel = "Allow Access",
         onGrant = onGrant,
         isRequired = false
+    )
+}
+
+@Composable
+private fun ShadeOwnershipPage() {
+    OnboardingPage(
+        title = "Shade Ownership (optional)",
+        body = "Lithium can take control of your notification shade. When enabled in Settings, " +
+                "it intercepts every notification before it appears, suppresses noise, and queues " +
+                "everything else for your briefing. By default, Tier 3 notifications — texts from " +
+                "contacts, 2FA codes — pass through immediately, and calls and alarms always get " +
+                "through no matter what. You can enable or disable this at any time."
     )
 }
 

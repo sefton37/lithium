@@ -16,7 +16,9 @@ import ai.talkingrock.lithium.data.db.NotificationDao
 import ai.talkingrock.lithium.data.db.QueueDao
 import ai.talkingrock.lithium.data.db.ReportDao
 import ai.talkingrock.lithium.data.db.SessionDao
+import ai.talkingrock.lithium.data.db.ShadeModeSeeder
 import ai.talkingrock.lithium.data.db.SuggestionDao
+import ai.talkingrock.lithium.data.repository.ShadeModeRepository
 import ai.talkingrock.lithium.service.ListenerState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -61,7 +63,9 @@ data class SettingsUiState(
     val requireCharging: Boolean = Prefs.DEFAULT_REQUIRE_CHARGING,
     val requireBatteryNotLow: Boolean = Prefs.DEFAULT_REQUIRE_BATTERY_NOT_LOW,
     val requireIdle: Boolean = Prefs.DEFAULT_REQUIRE_IDLE,
-    val isRunningAnalysis: Boolean = false
+    val isRunningAnalysis: Boolean = false,
+    /** Whether Shade Mode is enabled. Defaults to false — must be explicitly opted in. */
+    val shadeModeEnabled: Boolean = false,
 )
 
 /**
@@ -84,7 +88,9 @@ class SettingsViewModel @Inject constructor(
     private val reportDao: ReportDao,
     private val suggestionDao: SuggestionDao,
     private val queueDao: QueueDao,
-    private val behaviorProfileDao: AppBehaviorProfileDao
+    private val behaviorProfileDao: AppBehaviorProfileDao,
+    private val shadeModeRepository: ShadeModeRepository,
+    private val shadeModeSeeder: ShadeModeSeeder,
 ) : ViewModel() {
 
     companion object {
@@ -97,7 +103,8 @@ class SettingsViewModel @Inject constructor(
             diagnosticsEnabled = sharedPreferences.getBoolean(Prefs.PREF_DIAGNOSTICS, false),
             requireCharging = sharedPreferences.getBoolean(Prefs.PREF_REQUIRE_CHARGING, Prefs.DEFAULT_REQUIRE_CHARGING),
             requireBatteryNotLow = sharedPreferences.getBoolean(Prefs.PREF_REQUIRE_BATTERY_NOT_LOW, Prefs.DEFAULT_REQUIRE_BATTERY_NOT_LOW),
-            requireIdle = sharedPreferences.getBoolean(Prefs.PREF_REQUIRE_IDLE, Prefs.DEFAULT_REQUIRE_IDLE)
+            requireIdle = sharedPreferences.getBoolean(Prefs.PREF_REQUIRE_IDLE, Prefs.DEFAULT_REQUIRE_IDLE),
+            shadeModeEnabled = shadeModeRepository.isEnabled.value,
         )
     )
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
@@ -130,6 +137,13 @@ class SettingsViewModel @Inject constructor(
                 initialValue = Unit
             ).collect { /* collection drives updates via update{} above */ }
         }
+
+        // Track shade mode toggle changes from the repository (e.g., changed by the listener service).
+        viewModelScope.launch {
+            shadeModeRepository.isEnabled.collect { enabled ->
+                _uiState.update { it.copy(shadeModeEnabled = enabled) }
+            }
+        }
     }
 
     /** Refreshes permission status and DB stats — call when returning from system Settings. */
@@ -150,6 +164,36 @@ class SettingsViewModel @Inject constructor(
     fun setRetentionDays(days: Int) {
         sharedPreferences.edit().putInt(Prefs.PREF_RETENTION_DAYS, days).apply()
         _uiState.update { it.copy(retentionDays = days) }
+    }
+
+    /**
+     * Toggles Shade Mode and persists it via [ShadeModeRepository].
+     *
+     * Fix #8: If [enabled] is true but notification access is not currently granted, the
+     * repository is NOT written. A snackbar message is emitted instead, guiding the user
+     * to grant access first. This prevents the toggle appearing ON while nothing is
+     * happening (listener disconnected = no filtering).
+     *
+     * On the first successful enable, triggers [ShadeModeSeeder.seedIfNeeded] to insert the
+     * four default tier-based rules. Subsequent enables are no-ops in the seeder.
+     */
+    fun setShadeModeEnabled(enabled: Boolean) {
+        if (enabled && !listenerState.isConnected.value) {
+            // Refuse to enable — emit guidance instead of silently writing a no-op state.
+            viewModelScope.launch {
+                snackbarMessages.emit(
+                    "Grant notification access first (see Permissions below), then enable Shade Mode."
+                )
+            }
+            return
+        }
+        shadeModeRepository.setEnabled(enabled)
+        // _uiState is updated reactively via the isEnabled collector in init.
+        if (enabled) {
+            viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                shadeModeSeeder.seedIfNeeded()
+            }
+        }
     }
 
     /** Toggles and persists the diagnostics opt-in preference. */

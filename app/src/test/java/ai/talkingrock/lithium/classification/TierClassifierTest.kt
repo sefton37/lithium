@@ -167,4 +167,26 @@ class TierClassifierTest {
     // Self-package ignores text content
     @Test fun `self-package with security keyword content stays tier 0`() =
         assertEquals(0 to "self", classify("ai.talkingrock.lithium", text = "verification code 123456"))
+
+    // ── v2 TierClassifier extension tests ────────────────────────────────────
+
+    // Fix #5: CATEGORY_ALARM -> Tier 3 with reason "alarm".
+    // The SafetyAllowlist already bypasses cancellation for alarms in production, but the
+    // classifier now also assigns Tier 3 so that if an alarm notification somehow reaches
+    // rule evaluation it is always treated as an interrupt (not suppressed or queued).
+    @Test fun `CATEGORY_ALARM classifies as tier 3 alarm`() =
+        assertEquals(3 to "alarm", classify("com.android.deskclock", category = "alarm"))
+
+    // Plan §Testing Strategy: isOngoing == true always Tier 0 regardless of other inputs
+    @Test fun `isOngoing true always returns tier 0 regardless of package`() =
+        assertEquals(0 to "ongoing_persistent", classify("com.github.android", isOngoing = true))
+
+    @Test fun `isOngoing true always returns tier 0 regardless of category promo`() =
+        assertEquals(0 to "ongoing_persistent", classify("com.random.app", isOngoing = true, category = "promo"))
+
+    @Test fun `isOngoing true always returns tier 0 even for messaging package`() =
+        assertEquals(
+            0 to "ongoing_persistent",
+            classify("com.google.android.apps.messaging", isOngoing = true, isFromContact = true)
+        )
 }

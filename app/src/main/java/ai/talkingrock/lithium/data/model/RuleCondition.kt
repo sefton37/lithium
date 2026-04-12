@@ -42,4 +42,15 @@ sealed class RuleCondition {
     @Serializable
     @SerialName("composite_and")
     data class CompositeAnd(val conditions: List<RuleCondition>) : RuleCondition()
+
+    /**
+     * Match notifications whose [ai.talkingrock.lithium.data.model.NotificationRecord.tier]
+     * equals [tier]. Used by the default tier-based seed rules inserted by
+     * [ai.talkingrock.lithium.data.db.ShadeModeSeeder].
+     *
+     * Serialised as `{"type":"tier_match","tier":N}`.
+     */
+    @Serializable
+    @SerialName("tier_match")
+    data class TierMatch(val tier: Int) : RuleCondition()
 }

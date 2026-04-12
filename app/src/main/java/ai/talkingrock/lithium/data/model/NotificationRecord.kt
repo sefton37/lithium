@@ -12,6 +12,7 @@ import androidx.room.PrimaryKey
  *   v2: added is_from_contact
  *   v3: behavioral learning (app_behavior_profiles table)
  *   v4: added tier (0-3) and tier_reason for notification tier classification
+ *   v9: added disposition — how Lithium handled this notification
  */
 @Entity(tableName = "notifications")
 data class NotificationRecord(
@@ -72,4 +73,19 @@ data class NotificationRecord(
     /** Short code explaining why this tier was assigned. E.g. "sms", "media_player", "default". */
     @ColumnInfo(name = "tier_reason")
     val tierReason: String? = null,
+
+    /**
+     * How Lithium handled this notification. Populated by [LithiumNotificationListener].
+     *
+     * Values:
+     *   "allowed"       — notification passed through unmodified (no cancel).
+     *   "suppressed"    — notification was cancelled by a SUPPRESS rule.
+     *   "queued"        — notification was cancelled and placed in the review queue.
+     *   "resurfaced"    — notification was cancelled and reposted as a Lithium curated copy.
+     *   "safety_exempt" — notification was exempted from cancellation by [SafetyAllowlist].
+     *
+     * Null for records written before v9 (pre-shade-mode-alpha).
+     */
+    @ColumnInfo(name = "disposition")
+    val disposition: String? = null,
 )

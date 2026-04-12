@@ -45,6 +45,15 @@ object TierClassifier {
             return 3 to "security_2fa"
         }
 
+        // Alarms are always Tier 3 — checked BEFORE the ongoing/transport checks.
+        // CATEGORY_ALARM is plan-specified (Uncancellable Notification table, line ~360).
+        // The SafetyAllowlist already bypasses cancellation for alarms; this classifier
+        // entry ensures that if somehow an alarm notification reaches rule evaluation it
+        // is always treated as an interrupt, not suppressed or queued.
+        if (category == CATEGORY_ALARM) {
+            return 3 to "alarm"
+        }
+
         // Ongoing and transport notifications are always invisible — checked
         // BEFORE channel rules so e.g. "Messages is doing work in background"
         // (ongoing from com.google.android.apps.messaging) isn't misclassified
@@ -104,6 +113,7 @@ object TierClassifier {
         return 2 to "default"
     }
 
+    private const val CATEGORY_ALARM = "alarm"
     private const val CATEGORY_CALL = "call"
     private const val CATEGORY_TRANSPORT = "transport"
     private const val CATEGORY_REMINDER = "reminder"

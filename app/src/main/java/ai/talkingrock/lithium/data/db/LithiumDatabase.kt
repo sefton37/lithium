@@ -32,6 +32,12 @@ import ai.talkingrock.lithium.data.model.TrainingJudgment
  * - 2: M2 Correlate — added `is_from_contact` to notifications;
  *      added `package_name` and `duration_ms` to sessions.
  * - 3: Behavioral learning — added `app_behavior_profiles` table.
+ * - 4: Tier classification — added `tier` and `tier_reason` to notifications.
+ * - 5: Training judgments — added `training_judgments` table.
+ * - 6: XP and set-completion — added `xp_awarded`, `set_complete`, `set_bonus_xp` to training_judgments.
+ * - 7: Quest tracking — added `quest_id` to training_judgments.
+ * - 8: App-battle mode — added `app_rankings` and `app_battle_judgments` tables.
+ * - 9: Shade Mode Alpha — added `disposition` TEXT column to notifications.
  */
 @Database(
     entities = [
@@ -46,7 +52,7 @@ import ai.talkingrock.lithium.data.model.TrainingJudgment
         AppRanking::class,
         AppBattleJudgment::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = true
 )
 abstract class LithiumDatabase : RoomDatabase() {

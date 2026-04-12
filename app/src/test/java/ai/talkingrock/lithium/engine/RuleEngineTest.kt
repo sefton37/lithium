@@ -1,5 +1,7 @@
 package ai.talkingrock.lithium.engine
 
+import android.app.Notification
+import android.service.notification.StatusBarNotification
 import ai.talkingrock.lithium.data.model.NotificationRecord
 import ai.talkingrock.lithium.data.model.Rule
 import ai.talkingrock.lithium.data.repository.RuleRepository
@@ -7,9 +9,13 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 import kotlin.system.measureNanoTime
 
 /**
@@ -17,7 +23,10 @@ import kotlin.system.measureNanoTime
  * a [MutableStateFlow] so rule-list changes can be tested without a database.
  *
  * RuleEngine is pure logic — no Android runtime, no Hilt, no coroutines needed here.
+ * Robolectric is used for the SafetyAllowlist pipeline-guard section (Android framework constants).
  */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34])
 class RuleEngineTest {
 
     private lateinit var fakeRules: MutableStateFlow<List<Rule>>
@@ -209,5 +218,133 @@ class RuleEngineTest {
         // Soft assertion: log if slow but don't fail in CI (timing is environment-dependent)
         // Use assertTrue with a generous 10ms threshold to catch catastrophic regressions
         assertTrue("evaluate avg should be < 10ms (was $avgMs ms)", avgMs < 10.0)
+    }
+
+    // ── SafetyAllowlist pipeline-guard tests ──────────────────────────────────
+    //
+    // These tests verify that SafetyAllowlist correctly identifies notifications that must
+    // never reach rule evaluation. In the production pipeline, LithiumNotificationListener
+    // checks SafetyAllowlist BEFORE calling ruleEngine.evaluate() — these tests guard
+    // that the allowlist correctly returns true for those cases.
+
+    private fun safetySbn(
+        packageName: String = "com.example.app",
+        isOngoing: Boolean = false,
+        category: String? = null,
+        flags: Int = 0,
+    ): StatusBarNotification {
+        // Build a real Notification and set its public fields directly (MockK cannot stub fields).
+        val notification = Notification()
+        notification.category = category
+        notification.flags = flags
+
+        val sbn = mockk<StatusBarNotification>(relaxed = true)
+        every { sbn.packageName } returns packageName
+        every { sbn.isOngoing } returns isOngoing
+        every { sbn.notification } returns notification
+        return sbn
+    }
+
+    @Test fun `SafetyAllowlist - CATEGORY_CALL notification is exempt from rule evaluation`() {
+        // A call notification should be exempt — cancelNotification would fail silently anyway
+        fakeRules.value = listOf(packageRule("com.google.android.dialer", action = "suppress"))
+        val sbn = safetySbn(packageName = "com.google.android.dialer", category = Notification.CATEGORY_CALL)
+
+        // Verify the allowlist catches it before evaluate() would be called
+        assertTrue("Call should be safety-exempt", SafetyAllowlist.isSafetyExempt(sbn))
+    }
+
+    @Test fun `SafetyAllowlist - CATEGORY_ALARM notification is exempt from rule evaluation`() {
+        val sbn = safetySbn(packageName = "com.android.deskclock", category = Notification.CATEGORY_ALARM)
+        assertTrue("Alarm should be safety-exempt", SafetyAllowlist.isSafetyExempt(sbn))
+    }
+
+    @Test fun `SafetyAllowlist - ongoing notification is exempt from rule evaluation`() {
+        val sbn = safetySbn(packageName = "com.example.service", isOngoing = true)
+        assertTrue("Ongoing should be safety-exempt", SafetyAllowlist.isSafetyExempt(sbn))
+    }
+
+    @Test fun `SafetyAllowlist - Lithium own package is exempt from rule evaluation`() {
+        val sbn = safetySbn(packageName = "ai.talkingrock.lithium")
+        assertTrue("Lithium self-notification should be safety-exempt", SafetyAllowlist.isSafetyExempt(sbn))
+    }
+
+    @Test fun `SafetyAllowlist - systemui package is exempt from rule evaluation`() {
+        val sbn = safetySbn(packageName = "com.android.systemui")
+        assertTrue("systemui should be safety-exempt", SafetyAllowlist.isSafetyExempt(sbn))
+    }
+
+    @Test fun `SafetyAllowlist - normal app notification is NOT exempt and reaches evaluate`() {
+        // A normal notification should NOT be exempt — it goes through rule evaluation
+        fakeRules.value = listOf(packageRule("com.example.normalapp", action = "suppress"))
+        val sbn = safetySbn(packageName = "com.example.normalapp", isOngoing = false, category = null)
+
+        assertFalse("Normal notification should not be safety-exempt", SafetyAllowlist.isSafetyExempt(sbn))
+        // Verify rule evaluation DOES fire for this notification
+        assertEquals(
+            RuleAction.SUPPRESS,
+            engine.evaluate(record(pkg = "com.example.normalapp"))
+        )
+    }
+
+    // ── TierMatch condition tests ─────────────────────────────────────────────
+
+    private fun tierRecord(tier: Int) = NotificationRecord(
+        packageName = "com.test.app",
+        tier = tier,
+    )
+
+    private fun tierRule(tier: Int, action: String, id: Long = tier.toLong()) =
+        rule(id = id, conditionJson = """{"type":"tier_match","tier":$tier}""", action = action)
+
+    @Test fun `TierMatch condition matches tier 0 — returns SUPPRESS`() {
+        fakeRules.value = listOf(tierRule(0, "suppress"))
+        assertEquals(RuleAction.SUPPRESS, engine.evaluate(tierRecord(0)))
+    }
+
+    @Test fun `TierMatch condition matches tier 1 — returns SUPPRESS`() {
+        fakeRules.value = listOf(tierRule(1, "suppress"))
+        assertEquals(RuleAction.SUPPRESS, engine.evaluate(tierRecord(1)))
+    }
+
+    @Test fun `TierMatch condition matches tier 2 — returns QUEUE`() {
+        fakeRules.value = listOf(tierRule(2, "queue"))
+        assertEquals(RuleAction.QUEUE, engine.evaluate(tierRecord(2)))
+    }
+
+    @Test fun `TierMatch condition matches tier 3 — returns ALLOW`() {
+        fakeRules.value = listOf(tierRule(3, "allow"))
+        assertEquals(RuleAction.ALLOW, engine.evaluate(tierRecord(3)))
+    }
+
+    @Test fun `TierMatch condition does not match wrong tier — falls through to ALLOW`() {
+        fakeRules.value = listOf(tierRule(1, "suppress"))
+        // Record with tier 2 should not match a tier_match(1) rule
+        assertEquals(RuleAction.ALLOW, engine.evaluate(tierRecord(2)))
+    }
+
+    @Test fun `TierMatch tier 2 with RESURFACE action — returns RESURFACE`() {
+        fakeRules.value = listOf(tierRule(2, "resurface"))
+        assertEquals(RuleAction.RESURFACE, engine.evaluate(tierRecord(2)))
+    }
+
+    // ── RESURFACE action dispatch tests ──────────────────────────────────────
+
+    @Test fun `action string resurface returns RESURFACE`() {
+        fakeRules.value = listOf(packageRule("com.test.app", action = "resurface"))
+        assertEquals(RuleAction.RESURFACE, engine.evaluate(record(pkg = "com.test.app")))
+    }
+
+    @Test fun `action string Resurface (capital) returns RESURFACE — case insensitive`() {
+        fakeRules.value = listOf(packageRule("com.test.app", action = "Resurface"))
+        assertEquals(RuleAction.RESURFACE, engine.evaluate(record(pkg = "com.test.app")))
+    }
+
+    @Test fun `action string resurface degrades to ALLOW on old builds via else branch`() {
+        // Simulate an old build that has not yet added RESURFACE: the else branch returns ALLOW.
+        // In the current build RESURFACE is handled; this test documents the safe-degradation contract
+        // by verifying a truly unknown action (not "resurface") still returns ALLOW.
+        fakeRules.value = listOf(packageRule("com.test.app", action = "future_unknown_action"))
+        assertEquals(RuleAction.ALLOW, engine.evaluate(record(pkg = "com.test.app")))
     }
 }

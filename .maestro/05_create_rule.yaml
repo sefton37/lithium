@@ -46,13 +46,16 @@ appId: ai.talkingrock.lithium.debug
 - inputText: "maestro-05-rule"
 - hideKeyboard
 
-# Open the App dropdown
-- tapOn: "Select an app"
+# Open the App dropdown. The field is an ExposedDropdownMenuBox with a read-only
+# text field; its "Select an app" placeholder is not reliably exposed to Maestro,
+# so we tap the floating "App" label (which sits over the menuAnchor'd field).
+- tapOn: "App"
+- waitForAnimationToEnd
 
-# If observed-apps list is empty, abort the save path and just back out.
+# If observed-apps list is empty, abort the save path and back out to Rules.
 - runFlow:
     when:
-      visible: "No apps observed yet. Notifications will appear here after Lithium runs."
+      visible: "No apps observed yet"
     commands:
       - pressKey: back
       - pressKey: back
@@ -61,18 +64,18 @@ appId: ai.talkingrock.lithium.debug
             text: "Rules"
           timeout: 5000
 
-# If the dropdown populated, pick an observed package. Notifications posted via
-# `adb shell cmd notification post` register under the shell package, so that's
-# what will appear in the observed-apps list during the test run.
+# If the dropdown populated, pick the first observed package that matches a
+# typical Android package identifier (at least one dot, lowercase).
 - runFlow:
     when:
-      visible: "com.android.shell"
+      notVisible: "No apps observed yet"
     commands:
-      - tapOn: "com.android.shell"
-      # Pick an Action — open the Action dropdown and choose "Suppress"
       - tapOn:
-          text: "Action"
-          index: 1
+          text: "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+          index: 0
+      - waitForAnimationToEnd
+      # Pick an Action — tap the "Action" label to expand its dropdown
+      - tapOn: "Action"
       - extendedWaitUntil:
           visible:
             text: "Suppress"
@@ -86,14 +89,3 @@ appId: ai.talkingrock.lithium.debug
             text: "maestro-05-rule"
           timeout: 5000
       - assertVisible: "maestro-05-rule"
-
-# If neither branch matched (defensive fallback): ensure we return to Rules
-- runFlow:
-    when:
-      notVisible: "Rules"
-    commands:
-      - pressKey: back
-      - extendedWaitUntil:
-          visible:
-            text: "Rules"
-          timeout: 5000

@@ -30,6 +30,18 @@ object Prefs {
     const val PREF_DIAGNOSTICS = "diagnostics_enabled"
     const val DEFAULT_RETENTION_DAYS = 30
 
+    // -- Shade Mode --
+
+    /** Boolean: true when the user has enabled Shade Mode (notification interception). Default false. */
+    const val SHADE_MODE_ENABLED = "shade_mode_enabled"
+
+    /**
+     * Boolean: true after the default tier-based seed rules have been inserted by
+     * [ai.talkingrock.lithium.data.db.ShadeModeSeeder]. Once set, the seeder is a no-op
+     * even if called again — one-shot, idempotent.
+     */
+    const val SHADE_MODE_SEED_DONE = "shade_mode_seed_done"
+
     // -- Worker Constraints --
 
     /** Boolean: require wall charger (AC/wireless) before running analysis. Default true. */

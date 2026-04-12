@@ -310,4 +310,96 @@ class MigrationTest {
         cursor.close()
         db.close()
     }
+
+    // ── v8 → v9 ──────────────────────────────────────────────────────────────
+
+    @Test
+    fun migrate8to9_notificationsGainsDispositionColumn() {
+        helper.createDatabase(TEST_DB, 8)
+        val db = helper.runMigrationsAndValidate(
+            TEST_DB, 9, true,
+            DatabaseModule.MIGRATION_1_2, DatabaseModule.MIGRATION_2_3, DatabaseModule.MIGRATION_3_4,
+            DatabaseModule.MIGRATION_4_5, DatabaseModule.MIGRATION_5_6, DatabaseModule.MIGRATION_6_7,
+            DatabaseModule.MIGRATION_7_8, DatabaseModule.MIGRATION_8_9
+        )
+        val cursor = db.query("SELECT disposition FROM notifications LIMIT 0")
+        assertNotNull("disposition column should exist", cursor)
+        cursor.close()
+        db.close()
+    }
+
+    @Test
+    fun migrate8to9_existingRowsHaveNullDisposition() {
+        val v8Db = helper.createDatabase(TEST_DB, 8)
+        v8Db.execSQL(
+            """INSERT INTO notifications (package_name, posted_at_ms, is_ongoing, is_from_contact, tier)
+               VALUES ('com.test.v8', 12345, 0, 0, 2)"""
+        )
+        v8Db.close()
+
+        val db = helper.runMigrationsAndValidate(
+            TEST_DB, 9, true,
+            DatabaseModule.MIGRATION_1_2, DatabaseModule.MIGRATION_2_3, DatabaseModule.MIGRATION_3_4,
+            DatabaseModule.MIGRATION_4_5, DatabaseModule.MIGRATION_5_6, DatabaseModule.MIGRATION_6_7,
+            DatabaseModule.MIGRATION_7_8, DatabaseModule.MIGRATION_8_9
+        )
+        val cursor = db.query(
+            "SELECT disposition FROM notifications WHERE package_name='com.test.v8'"
+        )
+        assertEquals("v8 row should survive migration", 1, cursor.count)
+        cursor.moveToFirst()
+        assertEquals("pre-migration row should have NULL disposition", true, cursor.isNull(0))
+        cursor.close()
+        db.close()
+    }
+
+    @Test
+    fun migrate8to9_newRowCanWriteDispositionValue() {
+        helper.createDatabase(TEST_DB, 8)
+        val db = helper.runMigrationsAndValidate(
+            TEST_DB, 9, true,
+            DatabaseModule.MIGRATION_1_2, DatabaseModule.MIGRATION_2_3, DatabaseModule.MIGRATION_3_4,
+            DatabaseModule.MIGRATION_4_5, DatabaseModule.MIGRATION_5_6, DatabaseModule.MIGRATION_6_7,
+            DatabaseModule.MIGRATION_7_8, DatabaseModule.MIGRATION_8_9
+        )
+        db.execSQL(
+            """INSERT INTO notifications (package_name, posted_at_ms, is_ongoing, is_from_contact, tier, disposition)
+               VALUES ('com.new.app', 99999, 0, 0, 2, 'suppressed')"""
+        )
+        val cursor = db.query(
+            "SELECT disposition FROM notifications WHERE package_name='com.new.app'"
+        )
+        cursor.moveToFirst()
+        assertEquals("new row should have disposition='suppressed'", "suppressed", cursor.getString(0))
+        cursor.close()
+        db.close()
+    }
+
+    // ── Full chain: v1 → v9 ───────────────────────────────────────────────────
+
+    @Test
+    fun fullChain1to9_representativeDataSurvivesAllMigrations() {
+        val v1Db = helper.createDatabase(TEST_DB, 1)
+        v1Db.execSQL(
+            "INSERT INTO notifications (package_name, posted_at_ms, is_ongoing) VALUES ('com.full.chain', 77777, 0)"
+        )
+        v1Db.close()
+
+        val db = helper.runMigrationsAndValidate(
+            TEST_DB, 9, true,
+            DatabaseModule.MIGRATION_1_2, DatabaseModule.MIGRATION_2_3, DatabaseModule.MIGRATION_3_4,
+            DatabaseModule.MIGRATION_4_5, DatabaseModule.MIGRATION_5_6, DatabaseModule.MIGRATION_6_7,
+            DatabaseModule.MIGRATION_7_8, DatabaseModule.MIGRATION_8_9
+        )
+        val cursor = db.query(
+            "SELECT package_name, tier, disposition FROM notifications WHERE package_name='com.full.chain'"
+        )
+        assertEquals("row survives v1→v9 migration chain", 1, cursor.count)
+        cursor.moveToFirst()
+        assertEquals("com.full.chain", cursor.getString(0))
+        assertEquals("tier defaults to 2", 2, cursor.getInt(1))
+        assertEquals("disposition is NULL for pre-v9 rows", true, cursor.isNull(2))
+        cursor.close()
+        db.close()
+    }
 }

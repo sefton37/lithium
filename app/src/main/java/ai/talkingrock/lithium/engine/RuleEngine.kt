@@ -24,6 +24,11 @@ import javax.inject.Singleton
  * First-match-wins: rules are evaluated in [Rule.createdAtMs] order (oldest first, as
  * persisted by the DAO). The first rule whose condition matches determines the action.
  * If no rule matches, [RuleAction.ALLOW] is returned.
+ *
+ * Fix #7: [cachedRuleList] and [parsedConditions] are bundled into a single [Cache] data
+ * class behind a single @Volatile reference. A reader between two non-atomic writes would
+ * see inconsistent state (new rules list but old parsed conditions) — the single atomic
+ * reference eliminates that window entirely.
  */
 @Singleton
 class RuleEngine @Inject constructor(
@@ -31,13 +36,19 @@ class RuleEngine @Inject constructor(
 ) {
     private val json = Json { ignoreUnknownKeys = true }
 
-    // Cached parsed rules — rebuilt lazily when the approved list changes.
-    // Volatile so the main-thread read always sees the latest write.
-    @Volatile
-    private var cachedRuleList: List<Rule> = emptyList()
+    /**
+     * Immutable snapshot of the rule list and its pre-parsed conditions.
+     * Written as a single @Volatile reference so readers always see a consistent pair.
+     */
+    private data class Cache(
+        val rules: List<Rule>,
+        val conditions: Map<Long, RuleCondition>,
+    )
 
+    // Single @Volatile reference: assigning a new Cache is one atomic write.
+    // Any reader sees either the old Cache or the new Cache — never a half-written state.
     @Volatile
-    private var parsedConditions: Map<Long, RuleCondition> = emptyMap()
+    private var cache: Cache = Cache(emptyList(), emptyMap())
 
     /**
      * Evaluates [record] against all approved rules.
@@ -48,17 +59,21 @@ class RuleEngine @Inject constructor(
     fun evaluate(record: NotificationRecord): RuleAction {
         val rules = ruleRepository.approvedRules.value
 
-        // Rebuild condition cache if the rules list has changed.
-        if (rules !== cachedRuleList) {
-            rebuildCache(rules)
+        // Snapshot the current cache once — avoids repeated volatile reads.
+        var snapshot = cache
+
+        // Rebuild condition cache if the rules list has changed (identity check).
+        if (rules !== snapshot.rules) {
+            snapshot = rebuildCache(rules)
         }
 
-        for (rule in cachedRuleList) {
-            val condition = parsedConditions[rule.id] ?: continue
+        for (rule in snapshot.rules) {
+            val condition = snapshot.conditions[rule.id] ?: continue
             if (matches(condition, record)) {
                 return when (rule.action.lowercase()) {
                     "suppress" -> RuleAction.SUPPRESS
                     "queue" -> RuleAction.QUEUE
+                    "resurface" -> RuleAction.RESURFACE
                     else -> RuleAction.ALLOW
                 }
             }
@@ -67,7 +82,11 @@ class RuleEngine @Inject constructor(
         return RuleAction.ALLOW
     }
 
-    private fun rebuildCache(rules: List<Rule>) {
+    /**
+     * Builds a new [Cache] from [rules] and assigns it atomically.
+     * Returns the new cache so the caller can use it immediately without a second volatile read.
+     */
+    private fun rebuildCache(rules: List<Rule>): Cache {
         val parsed = mutableMapOf<Long, RuleCondition>()
         for (rule in rules) {
             try {
@@ -77,8 +96,9 @@ class RuleEngine @Inject constructor(
                 // The rule will be silently bypassed until the JSON is corrected.
             }
         }
-        cachedRuleList = rules
-        parsedConditions = parsed
+        val newCache = Cache(rules, parsed)
+        cache = newCache   // single atomic @Volatile write — fix #7
+        return newCache
     }
 
     private fun matches(condition: RuleCondition, record: NotificationRecord): Boolean {
@@ -101,6 +121,9 @@ class RuleEngine @Inject constructor(
 
             is RuleCondition.CompositeAnd ->
                 condition.conditions.all { matches(it, record) }
+
+            is RuleCondition.TierMatch ->
+                record.tier == condition.tier
         }
     }
 }

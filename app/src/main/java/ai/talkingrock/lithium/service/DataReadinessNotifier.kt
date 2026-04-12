@@ -1,12 +1,12 @@
 package ai.talkingrock.lithium.service
 
-import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import androidx.core.app.NotificationCompat
 import ai.talkingrock.lithium.MainActivity
+import ai.talkingrock.lithium.service.NotificationChannelRegistry
 
 /**
  * Sends a one-time local notification when Lithium has collected enough data
@@ -18,7 +18,6 @@ import ai.talkingrock.lithium.MainActivity
  */
 object DataReadinessNotifier {
 
-    private const val CHANNEL_ID = "lithium_readiness"
     private const val NOTIFICATION_ID = 2001
 
     /**
@@ -30,18 +29,8 @@ object DataReadinessNotifier {
     fun notify(context: Context) {
         val nm = context.getSystemService(NotificationManager::class.java)
 
-        // Create channel if needed (safe to call repeatedly)
-        if (nm.getNotificationChannel(CHANNEL_ID) == null) {
-            nm.createNotificationChannel(
-                NotificationChannel(
-                    CHANNEL_ID,
-                    "Lithium Ready",
-                    NotificationManager.IMPORTANCE_DEFAULT
-                ).apply {
-                    description = "Notifies you when Lithium has learned enough to make recommendations"
-                }
-            )
-        }
+        // Channel is registered by NotificationChannelRegistry in LithiumApp.onCreate().
+        // No need to create it here.
 
         // Tap opens the app to the Briefing screen
         val intent = Intent(context, MainActivity::class.java).apply {
@@ -52,7 +41,7 @@ object DataReadinessNotifier {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+        val notification = NotificationCompat.Builder(context, NotificationChannelRegistry.CHANNEL_READINESS)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle("Lithium is ready")
             .setContentText("Your first briefing is waiting — tap to see what Lithium learned.")

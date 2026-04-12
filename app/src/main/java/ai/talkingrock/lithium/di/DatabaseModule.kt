@@ -146,11 +146,43 @@ object DatabaseModule {
      * single user judgment comparing two notifications, with a snapshot of the
      * tier/classification/confidence of each side at judgment time.
      */
+    val MIGRATION_4_5 = object : Migration(4, 5) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS training_judgments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    left_notification_id INTEGER NOT NULL,
+                    right_notification_id INTEGER NOT NULL,
+                    choice TEXT NOT NULL,
+                    left_tier INTEGER NOT NULL,
+                    right_tier INTEGER NOT NULL,
+                    left_tier_reason TEXT,
+                    right_tier_reason TEXT,
+                    left_ai_classification TEXT,
+                    right_ai_classification TEXT,
+                    left_confidence REAL,
+                    right_confidence REAL,
+                    created_at_ms INTEGER NOT NULL
+                )
+                """.trimIndent()
+            )
+        }
+    }
+
     /**
      * Migration 5 → 6 adds XP and set-completion fields to training_judgments.
      * Existing rows get xp_awarded=0, set_complete=false, set_bonus_xp=0
      * (consistent with skipped-rows semantics; they contribute nothing to totals).
      */
+    val MIGRATION_5_6 = object : Migration(5, 6) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE training_judgments ADD COLUMN xp_awarded INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE training_judgments ADD COLUMN set_complete INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE training_judgments ADD COLUMN set_bonus_xp INTEGER NOT NULL DEFAULT 0")
+        }
+    }
+
     /**
      * Migration 6 → 7 adds the quest_id column to training_judgments, with
      * default 'free_play' so existing judgments stay valid.
@@ -202,35 +234,15 @@ object DatabaseModule {
         }
     }
 
-    val MIGRATION_5_6 = object : Migration(5, 6) {
+    /**
+     * Migration 8 → 9 (Shade Mode Alpha).
+     *
+     * Adds `disposition TEXT` to notifications. Nullable — existing rows receive NULL,
+     * meaning "recorded before shade mode existed." Safe to add to SQLite at any time.
+     */
+    val MIGRATION_8_9 = object : Migration(8, 9) {
         override fun migrate(db: SupportSQLiteDatabase) {
-            db.execSQL("ALTER TABLE training_judgments ADD COLUMN xp_awarded INTEGER NOT NULL DEFAULT 0")
-            db.execSQL("ALTER TABLE training_judgments ADD COLUMN set_complete INTEGER NOT NULL DEFAULT 0")
-            db.execSQL("ALTER TABLE training_judgments ADD COLUMN set_bonus_xp INTEGER NOT NULL DEFAULT 0")
-        }
-    }
-
-    val MIGRATION_4_5 = object : Migration(4, 5) {
-        override fun migrate(db: SupportSQLiteDatabase) {
-            db.execSQL(
-                """
-                CREATE TABLE IF NOT EXISTS training_judgments (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-                    left_notification_id INTEGER NOT NULL,
-                    right_notification_id INTEGER NOT NULL,
-                    choice TEXT NOT NULL,
-                    left_tier INTEGER NOT NULL,
-                    right_tier INTEGER NOT NULL,
-                    left_tier_reason TEXT,
-                    right_tier_reason TEXT,
-                    left_ai_classification TEXT,
-                    right_ai_classification TEXT,
-                    left_confidence REAL,
-                    right_confidence REAL,
-                    created_at_ms INTEGER NOT NULL
-                )
-                """.trimIndent()
-            )
+            db.execSQL("ALTER TABLE notifications ADD COLUMN disposition TEXT")
         }
     }
     /**
@@ -321,7 +333,8 @@ object DatabaseModule {
             .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
             .addMigrations(
                 MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4,
-                MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8
+                MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8,
+                MIGRATION_8_9
             )
             // No fallback destructive migration — force explicit migrations.
             // If a migration is missing, the app crashes loudly rather than

@@ -45,4 +45,13 @@ interface RuleDao {
     /** Hard-deletes a rule by ID. */
     @Query("DELETE FROM rules WHERE id = :id")
     suspend fun deleteById(id: Long)
+
+    /**
+     * Returns the count of rules inserted by the seeder (source = 'seed').
+     * Used by [ai.talkingrock.lithium.data.db.ShadeModeSeeder] to self-heal when the
+     * SHADE_MODE_SEED_DONE flag is absent but seed rules already exist (e.g. after a
+     * crash between the Room transaction and the SharedPreferences write).
+     */
+    @Query("SELECT COUNT(*) FROM rules WHERE source = 'seed'")
+    suspend fun countSeedRules(): Int
 }

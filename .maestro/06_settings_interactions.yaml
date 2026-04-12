@@ -1,12 +1,14 @@
-# Flow: Settings screen — verify all sections AND verify a constraint toggle
-# persists across an app relaunch (datastore write path is exercised end-to-end).
+# Flow: Settings screen — verify all sections AND verify a pref toggle persists
+# across an app relaunch (pref write path + cold-start read path exercised).
 # Prerequisites: Permissions granted by run-tests.sh Phase 2.
 #
-# The flow is symmetric: we toggle "Require charging" twice across a restart so
-# the end state matches the starting state. If the toggle did not persist, the
-# second-phase verification would find the Settings screen in an unexpected
-# state — but more importantly, it exercises the SettingsViewModel.setRequireCharging
-# write path and the DataStore read path on cold start.
+# We toggle "Anonymous diagnostics" twice across a restart so the end state
+# matches the starting state. We deliberately avoid toggling the worker
+# constraints ("Require charging" / "Require battery not low" / "Require device
+# idle") because those call WorkScheduler.rescheduleWithNewConstraints, which
+# can release the AI analysis worker and saturate CPU with llama.cpp inference
+# for minutes — poisoning every subsequent flow with "Briefing" timeouts.
+# Diagnostics is a plain pref with no side effects.
 appId: ai.talkingrock.lithium.debug
 ---
 - stopApp
@@ -42,10 +44,6 @@ appId: ai.talkingrock.lithium.debug
       text: "Require charging"
     direction: DOWN
 - assertVisible: "Require charging"
-
-# Toggle "Require charging" (exercises setRequireCharging write path)
-- tapOn: "Require charging"
-- waitForAnimationToEnd
 
 - scrollUntilVisible:
     element:
@@ -103,6 +101,11 @@ appId: ai.talkingrock.lithium.debug
     direction: DOWN
 - assertVisible: "Anonymous diagnostics"
 
+# Toggle "Anonymous diagnostics" (exercises setDiagnosticsEnabled write path).
+# Safe toggle: no WorkManager side effect.
+- tapOn: "Anonymous diagnostics"
+- waitForAnimationToEnd
+
 # --- About Section ---
 - scrollUntilVisible:
     element:
@@ -129,12 +132,12 @@ appId: ai.talkingrock.lithium.debug
 
 - scrollUntilVisible:
     element:
-      text: "Require charging"
+      text: "Diagnostics"
     direction: DOWN
-- assertVisible: "Require charging"
+- assertVisible: "Anonymous diagnostics"
 
 # Toggle back to restore original state for subsequent flows
-- tapOn: "Require charging"
+- tapOn: "Anonymous diagnostics"
 - waitForAnimationToEnd
 
 # Navigate back to Briefing

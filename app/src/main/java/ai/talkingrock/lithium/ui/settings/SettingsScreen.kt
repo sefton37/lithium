@@ -66,7 +66,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
  */
 @Composable
 fun SettingsScreen(
-    viewModel: SettingsViewModel = hiltViewModel()
+    viewModel: SettingsViewModel = hiltViewModel(),
+    onOpenEval: () -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -117,6 +118,85 @@ fun SettingsScreen(
             )
 
             Spacer(Modifier.height(24.dp))
+
+            // ── Section: Shade Mode ──────────────────────────────────────────────────────
+            SectionHeader("Shade Mode")
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "Lithium intercepts all notifications and decides what appears in your shade.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Shade Mode",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f).padding(end = 16.dp)
+                )
+                Switch(
+                    // Fix #8: disable toggle visually when notification access is not granted.
+                    enabled = uiState.notificationAccessGranted,
+                    checked = uiState.shadeModeEnabled,
+                    onCheckedChange = viewModel::setShadeModeEnabled,
+                    modifier = Modifier.semantics {
+                        contentDescription = when {
+                            !uiState.notificationAccessGranted -> "Shade Mode unavailable — grant notification access first"
+                            uiState.shadeModeEnabled -> "Disable Shade Mode"
+                            else -> "Enable Shade Mode"
+                        }
+                    }
+                )
+            }
+            // Fix #2: live connection indicator inside the Shade Mode section.
+            // When shade mode is on but notification access is absent, show a warning.
+            // When shade mode is on and connected, show a positive "Active" confirmation.
+            Spacer(Modifier.height(8.dp))
+            when {
+                uiState.shadeModeEnabled && !uiState.notificationAccessGranted -> {
+                    Text(
+                        text = "Shade Mode is paused — notification access not granted.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                !uiState.notificationAccessGranted -> {
+                    Text(
+                        text = "Grant notification access (in Permissions below) to enable Shade Mode.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                uiState.shadeModeEnabled -> {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Check,
+                            contentDescription = "Shade Mode active",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = "Active",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(28.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Spacer(Modifier.height(28.dp))
 
             // ── Section: Permissions ────────────────────────────────────────────────────
             SectionHeader("Permissions")
@@ -329,6 +409,20 @@ fun SettingsScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary
                 )
+            }
+
+            if (ai.talkingrock.lithium.BuildConfig.DEBUG) {
+                Spacer(Modifier.height(16.dp))
+                TextButton(
+                    onClick = onOpenEval,
+                    modifier = Modifier.defaultMinSize(minHeight = 48.dp),
+                ) {
+                    Text(
+                        text = "Model evaluation (debug)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.secondary,
+                    )
+                }
             }
             Spacer(Modifier.height(4.dp))
             Text(
