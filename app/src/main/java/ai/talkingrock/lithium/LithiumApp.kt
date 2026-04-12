@@ -1,7 +1,9 @@
 package ai.talkingrock.lithium
 
 import ai.talkingrock.lithium.ai.WorkScheduler
+import ai.talkingrock.lithium.api.LithiumApiService
 import android.app.Application
+import android.content.Intent
 import android.content.SharedPreferences
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
@@ -41,6 +43,7 @@ class LithiumApp : Application(), Configuration.Provider {
         val workManager = WorkManager.getInstance(this)
         scheduleAiAnalysisWork(workManager)
         scheduleHealthCheckWork(workManager)
+        startApiService()  // Phase 1: embedded Ktor API server
     }
 
     /**
@@ -64,5 +67,9 @@ class LithiumApp : Application(), Configuration.Provider {
      */
     private fun scheduleHealthCheckWork(workManager: WorkManager) {
         WorkScheduler.scheduleHealthCheck(workManager)
+    }
+
+    private fun startApiService() {
+        startForegroundService(Intent(this, LithiumApiService::class.java))
     }
 }

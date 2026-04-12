@@ -98,6 +98,7 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
             // Avoid conflicts between SQLCipher and ONNX native libraries
             excludes += "/META-INF/versions/**"
+            excludes += "/META-INF/INDEX.LIST"
         }
     }
 }
@@ -157,6 +158,11 @@ dependencies {
     // Kotlin serialization (condition_json parsing in RuleRepository)
     implementation(libs.kotlinx.json)
 
+
+    // Ktor (API server — Phase 1)
+    implementation(libs.ktor.server.cio)
+    implementation(libs.ktor.server.content.negotiation)
+    implementation(libs.ktor.serialization.kotlinx.json)
     // Core
     implementation(libs.core.ktx)
 

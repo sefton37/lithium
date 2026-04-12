@@ -12,6 +12,7 @@ security-crypto     = "1.1.0-alpha06"
 lifecycle           = "2.8.4"
 coroutines          = "1.8.1"
 kotlinx-json        = "1.6.3"
+ktor                = "2.3.12"
 junit               = "4.13.2"
 junit-android       = "1.1.5"
 espresso            = "3.5.1"
@@ -63,6 +64,11 @@ coroutines-android         = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 
 # JSON (for condition_json and AI output parsing)
 kotlinx-json               = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinx-json" }
+
+# Ktor (API server — Phase 1)
+ktor-server-cio                  = { group = "io.ktor", name = "ktor-server-cio", version.ref = "ktor" }
+ktor-server-content-negotiation  = { group = "io.ktor", name = "ktor-server-content-negotiation", version.ref = "ktor" }
+ktor-serialization-kotlinx-json  = { group = "io.ktor", name = "ktor-serialization-kotlinx-json", version.ref = "ktor" }
 
 # Core
 core-ktx                   = { group = "androidx.core", name = "core-ktx", version = "1.13.1" }

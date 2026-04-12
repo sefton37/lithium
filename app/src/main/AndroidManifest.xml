@@ -3,10 +3,15 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <!--
-        NO android.permission.INTERNET here.
-        Lithium is local-first/zero-trust: no network access in the main app.
-        The :diagnostics module has its own manifest with INTERNET for dev tooling.
+        INTERNET permission is declared below for the Phase 1 API server.
+        The server binds to 0.0.0.0:8400 but is only reachable via Tailscale ACLs.
+        The :diagnostics module also declares INTERNET for dev tooling.
     -->
+    <!--
+        INTERNET permission added for Phase 1 API server (Tailscale-only access).
+        The server binds to 0.0.0.0:8400 but is only reachable via Tailscale ACLs.
+    -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE" />
     <uses-permission
         android:name="android.permission.PACKAGE_USAGE_STATS"
@@ -84,6 +89,16 @@
                 android:value="androidx.startup"
                 tools:node="remove" />
         </provider>
+
+        <!--
+            LithiumApiService — embedded Ktor CIO server (Phase 1).
+            Foreground service that serves Lithium data over HTTP on :8400.
+            Only reachable via Tailscale (100.108.10.45). Started on app launch.
+        -->
+        <service
+            android:name=".api.LithiumApiService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
 
     </application>
 </manifest>
