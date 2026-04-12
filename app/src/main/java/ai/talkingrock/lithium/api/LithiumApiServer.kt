@@ -11,6 +11,7 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import ai.talkingrock.lithium.data.db.AppBehaviorProfileDao
 import ai.talkingrock.lithium.data.db.NotificationDao
+import ai.talkingrock.lithium.data.db.TierCount
 import ai.talkingrock.lithium.data.model.NotificationRecord
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -82,15 +83,23 @@ class LithiumApiServer @Inject constructor(
             )
         }
 
-        // GET /api/notifications?since=<epoch_ms>&limit=N
+        // GET /api/notifications?since=<epoch_ms>&limit=N&tier=2&tier=3
+        // tier parameter may be repeated to filter to multiple tiers.
+        // Omit tier to get all notifications.
         get("/api/notifications") {
             val sinceMs = call.request.queryParameters["since"]?.toLongOrNull()
                 ?: (System.currentTimeMillis() - DEFAULT_WINDOW_MS)
             val limit = call.request.queryParameters["limit"]?.toIntOrNull()
                 ?: DEFAULT_LIMIT
+            val tiers = call.request.queryParameters.getAll("tier")
+                ?.mapNotNull { it.toIntOrNull() }
 
             val records = withContext(Dispatchers.IO) {
-                notificationDao.getAllSince(sinceMs)
+                if (tiers.isNullOrEmpty()) {
+                    notificationDao.getAllSince(sinceMs)
+                } else {
+                    notificationDao.getAllSinceWithTiers(sinceMs, tiers)
+                }
             }.take(limit)
 
             call.respond(records.map { it.toDto() })
@@ -110,6 +119,8 @@ class LithiumApiServer @Inject constructor(
             val total = withContext(Dispatchers.IO) { notificationDao.count() }
             val classified = withContext(Dispatchers.IO) { notificationDao.countClassified() }
             val distinctApps = withContext(Dispatchers.IO) { notificationDao.countDistinctClassifiedApps() }
+            val tierBreakdown = withContext(Dispatchers.IO) { notificationDao.getTierBreakdown() }
+                .associate { it.tier to it.count }
             call.respond(
                 StatsResponse(
                     totalNotifications = total,
@@ -117,6 +128,7 @@ class LithiumApiServer @Inject constructor(
                     unclassifiedNotifications = total - classified,
                     distinctApps = distinctApps,
                     noiseRatio = if (total > 0) classified.toFloat() / total else 0f,
+                    tierBreakdown = tierBreakdown,
                 )
             )
         }
@@ -204,6 +216,8 @@ data class NotificationDto(
     val aiClassification: String?,
     val aiConfidence: Float?,
     val isFromContact: Boolean,
+    val tier: Int,
+    val tierReason: String?,
 )
 
 @Serializable
@@ -213,6 +227,8 @@ data class StatsResponse(
     val unclassifiedNotifications: Int,
     val distinctApps: Int,
     val noiseRatio: Float,
+    /** Count of notifications per tier (0-3). Keys present only for tiers with at least one notification. */
+    val tierBreakdown: Map<Int, Int> = emptyMap(),
 )
 
 @Serializable
@@ -254,4 +270,6 @@ private fun NotificationRecord.toDto() = NotificationDto(
     aiClassification = aiClassification,
     aiConfidence = aiConfidence,
     isFromContact = isFromContact,
+    tier = tier,
+    tierReason = tierReason,
 )

@@ -13,6 +13,9 @@ import kotlinx.coroutines.flow.Flow
  * Insert/update methods are suspend functions — called from the NotificationListenerService
  * coroutine scope. Query methods returning lists use Flow for reactive UI observation.
  */
+/** Projection used by [NotificationDao.getTierBreakdown]. */
+data class TierCount(val tier: Int, val count: Int)
+
 @Dao
 interface NotificationDao {
 
@@ -104,4 +107,18 @@ interface NotificationDao {
     /** Delete all notification records. Used by purge-all-data. */
     @Query("DELETE FROM notifications")
     suspend fun deleteAll()
+    /**
+     * Returns notifications posted since [sinceMs] filtered to the given tiers, newest first.
+     * Used by GET /api/notifications?tier=2&tier=3.
+     */
+    @Query("SELECT * FROM notifications WHERE posted_at_ms >= :sinceMs AND tier IN (:tiers) ORDER BY posted_at_ms DESC")
+    suspend fun getAllSinceWithTiers(sinceMs: Long, tiers: List<Int>): List<NotificationRecord>
+
+    /**
+     * Returns a count per tier across all recorded notifications.
+     * Used by GET /api/stats to produce a tier breakdown.
+     */
+    @Query("SELECT tier, COUNT(*) AS count FROM notifications GROUP BY tier ORDER BY tier ASC")
+    suspend fun getTierBreakdown(): List<TierCount>
+
 }

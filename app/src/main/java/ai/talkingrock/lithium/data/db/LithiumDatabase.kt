@@ -40,7 +40,7 @@ import ai.talkingrock.lithium.data.model.QueuedNotification
         QueuedNotification::class,
         AppBehaviorProfile::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = true
 )
 abstract class LithiumDatabase : RoomDatabase() {

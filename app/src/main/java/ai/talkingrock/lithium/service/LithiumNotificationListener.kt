@@ -11,6 +11,7 @@ import androidx.core.app.NotificationCompat
 import ai.talkingrock.lithium.data.model.NotificationRecord
 import ai.talkingrock.lithium.data.repository.NotificationRepository
 import ai.talkingrock.lithium.data.repository.SessionRepository
+import ai.talkingrock.lithium.classification.TierClassifier
 import ai.talkingrock.lithium.engine.ContactsResolver
 import ai.talkingrock.lithium.engine.RuleAction
 import ai.talkingrock.lithium.engine.RuleEngine
@@ -138,18 +139,29 @@ class LithiumNotificationListener : NotificationListenerService() {
 
     private fun buildRecord(sbn: StatusBarNotification): NotificationRecord {
         val extras = sbn.notification.extras
+        val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()
+        val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()
         // isSenderInContacts is synchronous; it hits the LRU cache on repeat senders
         // and gracefully returns false if READ_CONTACTS permission is absent.
         val isFromContact = contactsResolver.isSenderInContacts(sbn)
+        val (tier, tierReason) = TierClassifier.classify(
+            packageName = sbn.packageName,
+            title = title,
+            text = text,
+            isOngoing = sbn.isOngoing,
+            category = sbn.notification.category,
+        )
         return NotificationRecord(
             packageName = sbn.packageName,
             postedAtMs = sbn.postTime,
-            title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString(),
-            text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString(),
+            title = title,
+            text = text,
             channelId = sbn.notification.channelId,
             category = sbn.notification.category,
             isOngoing = sbn.isOngoing,
             isFromContact = isFromContact,
+            tier = tier,
+            tierReason = tierReason,
         )
     }
 

@@ -7,8 +7,11 @@ import androidx.room.PrimaryKey
 /**
  * Persisted notification event.
  *
- * Full schema implementation in M1. This stub satisfies Room's requirement
- * that every entity in @Database has at least a @PrimaryKey.
+ * Schema version history:
+ *   v1: initial scaffold
+ *   v2: added is_from_contact
+ *   v3: behavioral learning (app_behavior_profiles table)
+ *   v4: added tier (0-3) and tier_reason for notification tier classification
  */
 @Entity(tableName = "notifications")
 data class NotificationRecord(
@@ -54,5 +57,19 @@ data class NotificationRecord(
 
     /** True if the notification sender was found in the device contacts. Set by ContactsResolver. */
     @ColumnInfo(name = "is_from_contact")
-    val isFromContact: Boolean = false
+    val isFromContact: Boolean = false,
+
+    /**
+     * Tier assigned by [ai.talkingrock.lithium.classification.TierClassifier] at capture time.
+     *   0 = Invisible (media, ongoing noise, self)
+     *   1 = Noise (marketing, LinkedIn, Amazon)
+     *   2 = Worth seeing (Gmail, calendar, financial, GitHub) — DEFAULT
+     *   3 = Interrupt (SMS, calls, 2FA, security)
+     */
+    @ColumnInfo(name = "tier")
+    val tier: Int = 2,
+
+    /** Short code explaining why this tier was assigned. E.g. "sms", "media_player", "default". */
+    @ColumnInfo(name = "tier_reason")
+    val tierReason: String? = null,
 )

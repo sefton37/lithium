@@ -121,6 +121,20 @@ object DatabaseModule {
         }
     }
 
+
+    /**
+     * Migration from schema version 3 to version 4 (Tier Classification).
+     *
+     * Adds two columns to the notifications table:
+     *   tier        — integer 0-3 assigned at capture time by TierClassifier (default 2)
+     *   tier_reason — short code explaining the tier assignment (e.g. "sms", "media_player")
+     */
+    val MIGRATION_3_4 = object : Migration(3, 4) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE notifications ADD COLUMN tier INTEGER NOT NULL DEFAULT 2")
+            db.execSQL("ALTER TABLE notifications ADD COLUMN tier_reason TEXT")
+        }
+    }
     /**
      * Fixed 32-byte plaintext that the Keystore key encrypts to produce the passphrase.
      * This is NOT a secret — the security comes from the Keystore key, not this value.
@@ -207,7 +221,7 @@ object DatabaseModule {
         )
             .openHelperFactory(factory)
             .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
             // No fallback destructive migration — force explicit migrations.
             // If a migration is missing, the app crashes loudly rather than
             // silently wiping user data.
