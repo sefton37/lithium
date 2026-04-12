@@ -60,6 +60,14 @@ android {
         }
     }
 
+    // Expose Room schema JSON files to the instrumented test APK so
+    // MigrationTestHelper can load them via the assets folder.
+    sourceSets {
+        getByName("androidTest") {
+            assets.srcDir("$projectDir/schemas")
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
@@ -99,6 +107,9 @@ android {
             // Avoid conflicts between SQLCipher and ONNX native libraries
             excludes += "/META-INF/versions/**"
             excludes += "/META-INF/INDEX.LIST"
+            // MockK pulls in JUnit Jupiter transitively — exclude duplicate license files
+            excludes += "/META-INF/LICENSE.md"
+            excludes += "/META-INF/LICENSE-notice.md"
         }
     }
 }
@@ -184,6 +195,9 @@ dependencies {
     androidTestImplementation(libs.espresso)
     androidTestImplementation(libs.mockk.android)
     androidTestImplementation(libs.work.testing)
+    androidTestImplementation(libs.room.testing)
+    androidTestImplementation(libs.room.ktx)
+    androidTestImplementation(libs.coroutines.test)
 }
 
 // Allow Hilt's kapt to use the correct Java version

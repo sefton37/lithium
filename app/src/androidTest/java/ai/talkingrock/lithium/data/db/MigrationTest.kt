@@ -23,13 +23,15 @@ import org.junit.runner.RunWith
  *
  * Note: If the content-guard hook trips on the identityHash values in the schema
  * files, commit with --no-verify (only for Room schema hashes — see TESTING_STRATEGY).
+ *
+ * Method names use camelCase (not backtick-with-spaces) to ensure D8 compatibility
+ * at minSdk=29 (DEX version 035 rejects spaces in method names).
  */
 @RunWith(AndroidJUnit4::class)
 class MigrationTest {
 
     companion object {
         private const val TEST_DB = "migration-test"
-        private const val DB_CLASS = "ai.talkingrock.lithium.data.db.LithiumDatabase"
     }
 
     @get:Rule
@@ -42,7 +44,8 @@ class MigrationTest {
 
     // ── v1 → v2 ──────────────────────────────────────────────────────────────
 
-    @Test fun `migrate_1_to_2 notifications table gains is_from_contact with default 0`() {
+    @Test
+    fun migrate1to2_notificationsGainsIsFromContact() {
         helper.createDatabase(TEST_DB, 1)
         val db = helper.runMigrationsAndValidate(TEST_DB, 2, true, DatabaseModule.MIGRATION_1_2)
         val cursor = db.query("SELECT is_from_contact FROM notifications LIMIT 0")
@@ -51,7 +54,8 @@ class MigrationTest {
         db.close()
     }
 
-    @Test fun `migrate_1_to_2 sessions table gains package_name and duration_ms`() {
+    @Test
+    fun migrate1to2_sessionsGainsPackageNameAndDurationMs() {
         helper.createDatabase(TEST_DB, 1)
         val db = helper.runMigrationsAndValidate(TEST_DB, 2, true, DatabaseModule.MIGRATION_1_2)
         val cursor = db.query("SELECT package_name, duration_ms FROM sessions LIMIT 0")
@@ -60,7 +64,8 @@ class MigrationTest {
         db.close()
     }
 
-    @Test fun `migrate_1_to_2 existing notification rows survive with is_from_contact=0`() {
+    @Test
+    fun migrate1to2_existingNotificationRowsSurviveWithIsFromContactZero() {
         val v1Db = helper.createDatabase(TEST_DB, 1)
         v1Db.execSQL(
             "INSERT INTO notifications (package_name, posted_at_ms, is_ongoing) VALUES ('com.test.app', 1000, 0)"
@@ -78,7 +83,8 @@ class MigrationTest {
 
     // ── v2 → v3 ──────────────────────────────────────────────────────────────
 
-    @Test fun `migrate_2_to_3 app_behavior_profiles table created with correct schema`() {
+    @Test
+    fun migrate2to3_appBehaviorProfilesTableCreated() {
         helper.createDatabase(TEST_DB, 2)
         val db = helper.runMigrationsAndValidate(
             TEST_DB, 3, true, DatabaseModule.MIGRATION_1_2, DatabaseModule.MIGRATION_2_3
@@ -89,7 +95,8 @@ class MigrationTest {
         db.close()
     }
 
-    @Test fun `migrate_2_to_3 unique index on package_name and channel_id`() {
+    @Test
+    fun migrate2to3_uniqueIndexOnPackageNameAndChannelId() {
         helper.createDatabase(TEST_DB, 2)
         val db = helper.runMigrationsAndValidate(
             TEST_DB, 3, true, DatabaseModule.MIGRATION_1_2, DatabaseModule.MIGRATION_2_3
@@ -124,7 +131,8 @@ class MigrationTest {
 
     // ── v3 → v4 ──────────────────────────────────────────────────────────────
 
-    @Test fun `migrate_3_to_4 notifications gains tier INTEGER NOT NULL DEFAULT 2`() {
+    @Test
+    fun migrate3to4_notificationsGainsTierColumn() {
         helper.createDatabase(TEST_DB, 3)
         val db = helper.runMigrationsAndValidate(
             TEST_DB, 4, true,
@@ -136,7 +144,8 @@ class MigrationTest {
         db.close()
     }
 
-    @Test fun `migrate_3_to_4 notifications gains tier_reason TEXT nullable`() {
+    @Test
+    fun migrate3to4_notificationsGainsTierReasonColumn() {
         helper.createDatabase(TEST_DB, 3)
         val db = helper.runMigrationsAndValidate(
             TEST_DB, 4, true,
@@ -148,7 +157,8 @@ class MigrationTest {
         db.close()
     }
 
-    @Test fun `migrate_3_to_4 existing rows get tier=2 and tier_reason=NULL`() {
+    @Test
+    fun migrate3to4_existingRowsGetDefaultTierAndNullReason() {
         val v3Db = helper.createDatabase(TEST_DB, 3)
         v3Db.execSQL(
             "INSERT INTO notifications (package_name, posted_at_ms, is_ongoing, is_from_contact) VALUES ('com.test.app', 1000, 0, 0)"
@@ -169,7 +179,8 @@ class MigrationTest {
 
     // ── v4 → v5 ──────────────────────────────────────────────────────────────
 
-    @Test fun `migrate_4_to_5 training_judgments table created`() {
+    @Test
+    fun migrate4to5_trainingJudgmentsTableCreated() {
         helper.createDatabase(TEST_DB, 4)
         val db = helper.runMigrationsAndValidate(
             TEST_DB, 5, true,
@@ -184,7 +195,8 @@ class MigrationTest {
 
     // ── v5 → v6 ──────────────────────────────────────────────────────────────
 
-    @Test fun `migrate_5_to_6 training_judgments gains xp_awarded set_complete set_bonus_xp`() {
+    @Test
+    fun migrate5to6_trainingJudgmentsGainsXpColumns() {
         helper.createDatabase(TEST_DB, 5)
         val db = helper.runMigrationsAndValidate(
             TEST_DB, 6, true,
@@ -199,7 +211,8 @@ class MigrationTest {
 
     // ── v6 → v7 ──────────────────────────────────────────────────────────────
 
-    @Test fun `migrate_6_to_7 training_judgments gains quest_id with default free_play`() {
+    @Test
+    fun migrate6to7_trainingJudgmentsGainsQuestId() {
         val v6Db = helper.createDatabase(TEST_DB, 6)
         // Insert a row at v6 (no quest_id column yet)
         v6Db.execSQL(
@@ -224,7 +237,8 @@ class MigrationTest {
 
     // ── v7 → v8 ──────────────────────────────────────────────────────────────
 
-    @Test fun `migrate_7_to_8 app_rankings and app_battle_judgments tables created`() {
+    @Test
+    fun migrate7to8_appRankingsAndBattleJudgmentsTablesCreated() {
         helper.createDatabase(TEST_DB, 7)
         val db = helper.runMigrationsAndValidate(
             TEST_DB, 8, true,
@@ -244,7 +258,8 @@ class MigrationTest {
 
     // ── Full chain: v1 → v8 ────────────────────────────────────────────────
 
-    @Test fun `full_chain_1_to_8 create DB at v1 with representative data verify final schema and data survive`() {
+    @Test
+    fun fullChain1to8_representativeDataSurvivesAllMigrations() {
         val v1Db = helper.createDatabase(TEST_DB, 1)
         v1Db.execSQL(
             "INSERT INTO notifications (package_name, posted_at_ms, is_ongoing) VALUES ('com.chain.test', 9999, 0)"
@@ -271,7 +286,8 @@ class MigrationTest {
         db.close()
     }
 
-    @Test fun `full_chain_4_to_8 DB at v4 with tier rows migrate to v8 data survives`() {
+    @Test
+    fun fullChain4to8_v4RowsSurviveToV8() {
         val v4Db = helper.createDatabase(TEST_DB, 4)
         v4Db.execSQL(
             """INSERT INTO notifications (package_name, posted_at_ms, is_ongoing, is_from_contact, tier, tier_reason)
