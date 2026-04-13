@@ -1,0 +1,121 @@
+package ai.talkingrock.lithium.ui.chat
+
+import ai.talkingrock.lithium.ai.BriefingService
+import ai.talkingrock.lithium.ai.LlamaEngine
+import ai.talkingrock.lithium.ai.RuleExtractor
+import ai.talkingrock.lithium.data.model.Report
+import ai.talkingrock.lithium.data.model.Rule
+import ai.talkingrock.lithium.data.repository.RuleRepository
+import ai.talkingrock.lithium.ui.training.MainDispatcherRule
+import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.every
+import io.mockk.mockk
+import io.mockk.slot
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Test
+
+@OptIn(ExperimentalCoroutinesApi::class)
+class ChatViewModelTest {
+
+    @get:org.junit.Rule val mainDispatcherRule = MainDispatcherRule()
+
+    private lateinit var briefingService: BriefingService
+    private lateinit var extractor: RuleExtractor
+    private lateinit var ruleRepo: RuleRepository
+    private lateinit var llama: LlamaEngine
+    private lateinit var vm: ChatViewModel
+
+    @Before fun setUp() {
+        briefingService = mockk()
+        extractor = mockk()
+        ruleRepo = mockk()
+        llama = mockk(relaxed = true)
+        every { llama.isModelLoaded() } returns true
+        vm = ChatViewModel(briefingService, extractor, ruleRepo, llama, modelDir = "/tmp/models")
+    }
+
+    @Test fun `invokeBriefing appends BriefingResult`() = runTest {
+        val report = Report(
+            id = 1,
+            generatedAtMs = 1L,
+            summaryJson = "{\"text\":\"Hello world\"}",
+            reviewed = false,
+        )
+        coEvery { briefingService.generateReport(any(), any()) } returns BriefingService.Result(
+            report = report,
+            reportId = 1,
+            suggestionCount = 0,
+            allNotifications = emptyList(),
+            sinceMs = 0L,
+        )
+        vm.invokeBriefing()
+        advanceUntilIdle()
+        val last = vm.state.value.messages.last()
+        assertTrue(last is ChatMessage.BriefingResult)
+        assertEquals("Hello world", (last as ChatMessage.BriefingResult).reportText)
+    }
+
+    @Test fun `submitInput starts rule creation when no draft exists`() = runTest {
+        coEvery { extractor.extract(any(), any()) } returns RuleDraftState(originalInput = "mute slack")
+        every { extractor.totalFields } returns 5
+        vm.updateInputDraft("mute slack")
+        vm.submitInput()
+        advanceUntilIdle()
+        val msgs = vm.state.value.messages
+        assertTrue(msgs.any { it is ChatMessage.UserText })
+        assertTrue(msgs.any { it is ChatMessage.RuleDraft })
+    }
+
+    @Test fun `approveRule inserts Rule with ai source and pending_review`() = runTest {
+        val ruleSlot = slot<Rule>()
+        coEvery { ruleRepo.insertRule(capture(ruleSlot)) } returns 42L
+        val draft = RuleDraftState(
+            originalInput = "mute slack",
+            packageName = "com.slack",
+            action = "suppress",
+        )
+        vm.approveRule(draft)
+        advanceUntilIdle()
+        coVerify { ruleRepo.insertRule(any()) }
+        assertEquals("ai", ruleSlot.captured.source)
+        assertEquals("pending_review", ruleSlot.captured.status)
+        assertEquals("suppress", ruleSlot.captured.action)
+    }
+
+    @Test fun `approveRule with no filters posts system error and does not insert`() = runTest {
+        val draft = RuleDraftState(originalInput = "do nothing")
+        vm.approveRule(draft)
+        advanceUntilIdle()
+        coVerify(exactly = 0) { ruleRepo.insertRule(any()) }
+        val last = vm.state.value.messages.last()
+        assertTrue(last is ChatMessage.SystemMessage)
+    }
+
+    @Test fun `submitInput refines when a draft already exists`() = runTest {
+        coEvery { extractor.extract(any(), any()) } returns RuleDraftState(
+            originalInput = "mute slack",
+            packageName = "com.slack",
+        )
+        coEvery { extractor.refine(any(), any(), any()) } returns RuleDraftState(
+            originalInput = "mute slack. only work hours",
+            packageName = "com.slack",
+        )
+        every { extractor.totalFields } returns 5
+
+        vm.updateInputDraft("mute slack")
+        vm.submitInput()
+        advanceUntilIdle()
+        vm.updateInputDraft("only work hours")
+        vm.submitInput()
+        advanceUntilIdle()
+
+        coVerify { extractor.refine(any(), eq("only work hours"), any()) }
+    }
+}

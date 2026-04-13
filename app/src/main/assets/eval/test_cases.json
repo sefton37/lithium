@@ -1,0 +1,578 @@
+{
+  "_comment": "Labeled test scenarios. Each scenario has one `expected` extraction and 4 `phrasings` in different tones (direct, verbose, vague, emotional/casual). The scorer runs each phrasing independently; a model passes a scenario only if it extracts correctly across all tones. `acceptable` lists tolerated alternates per field. null = extractor should leave unset.",
+  "scenarios": [
+    {
+      "id": "simple_01",
+      "expected": { "packageName": "com.slack", "channelId": null, "category": null, "notFromContact": false, "action": "suppress" },
+      "phrasings": [
+        { "tone": "direct",   "text": "Mute all notifications from Slack" },
+        { "tone": "verbose",  "text": "I would like to suppress every single notification that the Slack application produces, across all channels and workspaces, without exception, please." },
+        { "tone": "vague",    "text": "slack is too loud, fix it" },
+        { "tone": "emotional","text": "UGH — Slack is driving me up the wall. Turn the whole thing off." }
+      ]
+    },
+    {
+      "id": "simple_02",
+      "expected": { "packageName": "com.whatsapp", "channelId": null, "category": null, "notFromContact": false, "action": "suppress" },
+      "phrasings": [
+        { "tone": "direct",   "text": "Silence WhatsApp" },
+        { "tone": "verbose",  "text": "Could you please ensure that the WhatsApp messaging app does not produce any sort of notification or alert from this point forward" },
+        { "tone": "casual",   "text": "hush whatsapp" },
+        { "tone": "nervous",  "text": "um, I think I'd like WhatsApp to be quiet? if that's okay" }
+      ]
+    },
+    {
+      "id": "simple_03",
+      "expected": { "packageName": "com.instagram.android", "channelId": null, "category": null, "notFromContact": false, "action": "suppress" },
+      "phrasings": [
+        { "tone": "direct",   "text": "Hide everything from Instagram" },
+        { "tone": "coarse",   "text": "kill instagram notifs" },
+        { "tone": "verbose",  "text": "Suppress the entirety of Instagram's notification output regardless of the source channel or content category" },
+        { "tone": "emotional","text": "instagram is an attention vampire — shut it down completely" }
+      ]
+    },
+    {
+      "id": "simple_04",
+      "expected": { "packageName": "com.tiktok", "channelId": null, "category": null, "notFromContact": false, "action": "suppress" },
+      "phrasings": [
+        { "tone": "direct",  "text": "Block TikTok notifications" },
+        { "tone": "vague",   "text": "tiktok bad" },
+        { "tone": "formal",  "text": "Please disable all notification delivery from the TikTok application" },
+        { "tone": "casual",  "text": "no more tiktok pings thx" }
+      ]
+    },
+    {
+      "id": "simple_05",
+      "expected": { "packageName": "com.reddit.frontpage", "channelId": null, "category": null, "notFromContact": false, "action": "suppress" },
+      "phrasings": [
+        { "tone": "direct",  "text": "Stop Reddit alerts" },
+        { "tone": "verbose", "text": "I want you to prevent Reddit from displaying any notifications on my device, indefinitely" },
+        { "tone": "vague",   "text": "reddit is distracting" },
+        { "tone": "coarse",  "text": "reddit off" }
+      ]
+    },
+    {
+      "id": "simple_06",
+      "expected": { "packageName": "com.google.android.youtube", "channelId": null, "category": null, "notFromContact": false, "action": "suppress" },
+      "phrasings": [
+        { "tone": "direct",  "text": "Turn off YouTube pings" },
+        { "tone": "casual",  "text": "youtube can stop bugging me" },
+        { "tone": "formal",  "text": "Kindly suspend all YouTube notifications" },
+        { "tone": "nervous", "text": "I maybe want to mute youtube? I'm not sure, just try it" }
+      ]
+    },
+    {
+      "id": "simple_07",
+      "expected": { "packageName": "com.facebook.katana", "channelId": null, "category": null, "notFromContact": false, "action": "suppress" },
+      "phrasings": [
+        { "tone": "direct",   "text": "Mute Facebook" },
+        { "tone": "emotional","text": "I don't want Facebook touching my phone anymore, EVER" },
+        { "tone": "vague",    "text": "fb noise gone" },
+        { "tone": "verbose",  "text": "Ensure that the Facebook application is fully silenced with regard to push notifications" }
+      ]
+    },
+    {
+      "id": "simple_08",
+      "expected": { "packageName": "com.discord", "channelId": null, "category": null, "notFromContact": false, "action": "suppress" },
+      "phrasings": [
+        { "tone": "direct",  "text": "Quiet Discord" },
+        { "tone": "casual",  "text": "discord? nah i'm good" },
+        { "tone": "formal",  "text": "Please mute the Discord application in its entirety" },
+        { "tone": "coarse",  "text": "shut discord up" }
+      ]
+    },
+
+    {
+      "id": "channel_01",
+      "expected": { "packageName": "com.slack", "channelId": "random", "category": null, "notFromContact": false, "action": "suppress" },
+      "phrasings": [
+        { "tone": "direct",  "text": "Mute Slack notifications on the 'random' channel" },
+        { "tone": "casual",  "text": "slack #random is too much" },
+        { "tone": "verbose", "text": "I would like to suppress only the notifications that originate from the channel named 'random' inside the Slack app" },
+        { "tone": "vague",   "text": "that random slack channel, mute it" }
+      ]
+    },
+    {
+      "id": "channel_02",
+      "expected": { "packageName": "com.google.android.gm", "channelId": "promotions", "category": null, "notFromContact": false, "action": "suppress" },
+      "phrasings": [
+        { "tone": "direct",  "text": "Hide the 'promotions' channel from Gmail" },
+        { "tone": "coarse",  "text": "gmail promo tab, gone" },
+        { "tone": "formal",  "text": "Silence messages delivered to the Promotions label/channel in Gmail" },
+        { "tone": "emotional","text": "I HATE the gmail promotions tab blowing up my notifications" }
+      ]
+    },
+    {
+      "id": "channel_03",
+      "expected": { "packageName": "com.discord", "channelId": "friend_activity", "category": null, "notFromContact": false, "action": "suppress" },
+      "phrasings": [
+        { "tone": "direct", "text": "Silence Discord's 'friend_activity' channel" },
+        { "tone": "casual", "text": "i don't care who's online on discord" },
+        { "tone": "vague",  "text": "discord friend activity thing, off" },
+        { "tone": "verbose","text": "Turn off the Discord channel that notifies me whenever my friends come online, titled friend_activity" }
+      ]
+    },
+    {
+      "id": "channel_04",
+      "expected": { "packageName": "com.instagram.android", "channelId": "suggestions", "category": null, "notFromContact": false, "action": "suppress" },
+      "acceptable": { "channelId": ["suggestions", "suggested", "recommendations"] },
+      "phrasings": [
+        { "tone": "direct",  "text": "Turn off Instagram suggestions channel" },
+        { "tone": "coarse",  "text": "instagram suggestion crap, no" },
+        { "tone": "formal",  "text": "Please disable the 'suggestions' notification channel on Instagram" },
+        { "tone": "vague",   "text": "the instagram thing where it tells me about posts i might like" }
+      ]
+    },
+
+    {
+      "id": "category_01",
+      "expected": { "packageName": null, "channelId": null, "category": "promotional", "notFromContact": false, "action": "suppress" },
+      "phrasings": [
+        { "tone": "direct",  "text": "Hide all promotional notifications" },
+        { "tone": "casual",  "text": "kill every promo notification" },
+        { "tone": "verbose", "text": "Suppress all notifications whose content category is classified as promotional marketing material" },
+        { "tone": "emotional","text": "I'm done with promos. Anything selling me stuff, mute it." }
+      ]
+    },
+    {
+      "id": "category_02",
+      "expected": { "packageName": null, "channelId": null, "category": "engagement_bait", "notFromContact": false, "action": "suppress" },
+      "phrasings": [
+        { "tone": "direct",  "text": "Block engagement bait" },
+        { "tone": "casual",  "text": "nuke the 'come back!' pings" },
+        { "tone": "formal",  "text": "Suppress any notification intended primarily to lure me back into an application" },
+        { "tone": "emotional","text": "I hate engagement bait notifications so much, please make them disappear" }
+      ]
+    },
+    {
+      "id": "category_03",
+      "expected": { "packageName": null, "channelId": null, "category": "social_signal", "notFromContact": false, "action": "suppress" },
+      "phrasings": [
+        { "tone": "direct",   "text": "Silence all social signal notifications — likes and follows" },
+        { "tone": "coarse",   "text": "likes and follows? no thanks" },
+        { "tone": "verbose",  "text": "Suppress every notification in the social-signal category, i.e. likes, reactions, follows, kudos, and similar interactions" },
+        { "tone": "nervous",  "text": "i think the likes and stuff, they should be off? yeah" }
+      ]
+    },
+    {
+      "id": "category_04",
+      "expected": { "packageName": "com.amazon.mShop.android.shopping", "channelId": null, "category": "promotional", "notFromContact": false, "action": "suppress" },
+      "phrasings": [
+        { "tone": "direct",   "text": "Mute Amazon deal alerts (promotional stuff)" },
+        { "tone": "casual",   "text": "amazon promos = no" },
+        { "tone": "verbose",  "text": "Hide notifications from the Amazon shopping app that are promotional in nature" },
+        { "tone": "emotional","text": "Amazon won't STOP with the deal notifications — make them go away" }
+      ]
+    },
+    {
+      "id": "category_05",
+      "expected": { "packageName": null, "channelId": null, "category": "system", "notFromContact": false, "action": "queue" },
+      "phrasings": [
+        { "tone": "direct",  "text": "Queue all system notifications" },
+        { "tone": "formal",  "text": "Hold system notifications for later review rather than delivering them immediately" },
+        { "tone": "casual",  "text": "batch the system stuff for later" },
+        { "tone": "vague",   "text": "system notifs, hold em" }
+      ]
+    },
+
+    {
+      "id": "contact_01",
+      "expected": { "packageName": "com.whatsapp", "channelId": null, "category": null, "notFromContact": true, "action": "suppress" },
+      "phrasings": [
+        { "tone": "direct",  "text": "Mute messages on WhatsApp from people who aren't in my contacts" },
+        { "tone": "casual",  "text": "whatsapp from strangers, kill it" },
+        { "tone": "verbose", "text": "On WhatsApp, suppress any message whose sender is not present in my device contact list" },
+        { "tone": "nervous", "text": "maybe only hide whatsapp when i don't know the person? i think" }
+      ]
+    },
+    {
+      "id": "contact_02",
+      "expected": { "packageName": "com.google.android.apps.messaging", "channelId": null, "category": null, "notFromContact": true, "action": "suppress" },
+      "acceptable": { "packageName": ["com.google.android.apps.messaging", null] },
+      "phrasings": [
+        { "tone": "direct",  "text": "Hide texts from strangers" },
+        { "tone": "emotional","text": "spam texters are the worst — if i don't know you, you're muted" },
+        { "tone": "formal",  "text": "Do not notify me of SMS messages from senders who are not in my contacts" },
+        { "tone": "coarse",  "text": "rando texts, nope" }
+      ]
+    },
+    {
+      "id": "contact_03",
+      "expected": { "packageName": null, "channelId": null, "category": null, "notFromContact": true, "action": "suppress" },
+      "phrasings": [
+        { "tone": "direct",  "text": "Only let calls and messages through if the sender is a contact" },
+        { "tone": "formal",  "text": "Suppress any incoming notification unless the originator is a member of my contact list" },
+        { "tone": "casual",  "text": "if they're not my contact, i don't wanna see it" },
+        { "tone": "vague",   "text": "contacts only mode" }
+      ]
+    },
+    {
+      "id": "contact_04",
+      "expected": { "packageName": "org.telegram.messenger", "channelId": null, "category": null, "notFromContact": true, "action": "suppress" },
+      "phrasings": [
+        { "tone": "direct",  "text": "Block Telegram from non-contacts" },
+        { "tone": "verbose", "text": "Prevent the Telegram application from delivering notifications when the sender is not in my address book" },
+        { "tone": "casual",  "text": "telegram strangers, gone" },
+        { "tone": "coarse",  "text": "telegram randoms = mute" }
+      ]
+    },
+    {
+      "id": "contact_05",
+      "expected": { "packageName": "com.slack", "channelId": null, "category": null, "notFromContact": true, "action": "suppress" },
+      "acceptable": { "channelId": [null, "dms", "direct_messages"] },
+      "phrasings": [
+        { "tone": "direct",  "text": "Silence Slack DMs when the sender isn't in my contacts" },
+        { "tone": "verbose", "text": "For Slack direct messages, if the sending user is not present in my device contact list, do not notify me" },
+        { "tone": "casual",  "text": "slack dms from strangers? nope" },
+        { "tone": "nervous", "text": "slack dms, hide them if i don't know the person maybe" }
+      ]
+    },
+
+    {
+      "id": "contact_neg_01",
+      "expected": { "packageName": "com.whatsapp", "channelId": null, "category": null, "notFromContact": false, "action": "suppress" },
+      "phrasings": [
+        { "tone": "direct",  "text": "Mute WhatsApp from Sarah Mitchell" },
+        { "tone": "casual",  "text": "can you make sarah mitchell's whatsapps silent" },
+        { "tone": "formal",  "text": "Suppress WhatsApp notifications originating from my contact Sarah Mitchell" },
+        { "tone": "coarse",  "text": "sarah whatsapps, off" }
+      ]
+    },
+    {
+      "id": "contact_neg_02",
+      "expected": { "packageName": null, "channelId": null, "category": null, "notFromContact": false, "action": "suppress" },
+      "phrasings": [
+        { "tone": "direct",  "text": "Silence messages from Mom" },
+        { "tone": "emotional","text": "i love my mom but i need her texts muted for now" },
+        { "tone": "casual",  "text": "mute mom" },
+        { "tone": "nervous", "text": "maybe silence mom's messages? i know that sounds bad" }
+      ]
+    },
+    {
+      "id": "contact_neg_03",
+      "expected": { "packageName": "com.slack", "channelId": null, "category": null, "notFromContact": false, "action": "suppress" },
+      "phrasings": [
+        { "tone": "direct",  "text": "Mute all of Slack including from team" },
+        { "tone": "verbose", "text": "Suppress every Slack notification without regard to whether the sender is a teammate or contact" },
+        { "tone": "casual",  "text": "all slack, gone — even team" },
+        { "tone": "emotional","text": "EVERYTHING from slack — even my team — OFF" }
+      ]
+    },
+
+    {
+      "id": "compound_01",
+      "expected": { "packageName": "com.google.android.gm", "channelId": null, "category": "promotional", "notFromContact": false, "action": "suppress" },
+      "phrasings": [
+        { "tone": "direct",  "text": "Mute promotional emails in Gmail" },
+        { "tone": "casual",  "text": "gmail promos — hide" },
+        { "tone": "verbose", "text": "Suppress Gmail notifications whose content category is promotional marketing" },
+        { "tone": "coarse",  "text": "gmail promo = silent" }
+      ]
+    },
+    {
+      "id": "compound_02",
+      "expected": { "packageName": "com.slack", "channelId": null, "category": null, "notFromContact": true, "action": "suppress" },
+      "phrasings": [
+        { "tone": "direct",  "text": "Silence Slack messages from non-contacts only" },
+        { "tone": "verbose", "text": "On Slack, notify me only when the sender is one of my contacts; suppress all others" },
+        { "tone": "casual",  "text": "slack strangers, muted" },
+        { "tone": "nervous", "text": "slack but only when i don't know the person? hide those i think" }
+      ]
+    },
+    {
+      "id": "compound_03",
+      "expected": { "packageName": "com.instagram.android", "channelId": null, "category": "engagement_bait", "notFromContact": false, "action": "queue" },
+      "phrasings": [
+        { "tone": "direct",  "text": "Queue Instagram engagement bait" },
+        { "tone": "verbose", "text": "Hold for later review any Instagram notification intended to bait me back into the app" },
+        { "tone": "casual",  "text": "insta bait, save for later" },
+        { "tone": "emotional","text": "those manipulative insta pings — don't delete, but don't show me either" }
+      ]
+    },
+    {
+      "id": "compound_04",
+      "expected": { "packageName": "com.twitter.android", "channelId": null, "category": "social_signal", "notFromContact": false, "action": "suppress" },
+      "phrasings": [
+        { "tone": "direct",  "text": "Hide Twitter social signals like likes and retweets" },
+        { "tone": "coarse",  "text": "twitter likes/rts, kill" },
+        { "tone": "verbose", "text": "Suppress all Twitter notifications in the social-signal category including likes, retweets, and follows" },
+        { "tone": "casual",  "text": "twitter likes and retweets, meh — mute" }
+      ]
+    },
+    {
+      "id": "compound_05",
+      "expected": { "packageName": "com.linkedin.android", "channelId": null, "category": "engagement_bait", "notFromContact": true, "action": "queue" },
+      "phrasings": [
+        { "tone": "direct",  "text": "Queue LinkedIn engagement bait from non-contacts" },
+        { "tone": "verbose", "text": "Hold for later review LinkedIn notifications classified as engagement bait, but only when the sender is not in my contacts" },
+        { "tone": "casual",  "text": "linkedin bait from randos, batch em" },
+        { "tone": "nervous", "text": "linkedin, um, when it's baity and not from my contacts, maybe queue it?" }
+      ]
+    },
+
+    {
+      "id": "action_01",
+      "expected": { "packageName": "com.spotify.music", "channelId": null, "category": null, "notFromContact": false, "action": "queue" },
+      "phrasings": [
+        { "tone": "direct",  "text": "Hold Spotify notifications for later" },
+        { "tone": "casual",  "text": "spotify stuff, batch it" },
+        { "tone": "formal",  "text": "Please defer Spotify notifications for deferred review" },
+        { "tone": "vague",   "text": "spotify later not now" }
+      ]
+    },
+    {
+      "id": "action_02",
+      "expected": { "packageName": "com.netflix.mediaclient", "channelId": null, "category": null, "notFromContact": false, "action": "queue" },
+      "phrasings": [
+        { "tone": "direct",  "text": "Save Netflix pings to review later" },
+        { "tone": "verbose", "text": "Place any Netflix notifications into the deferred queue so I can review them at a time of my choosing" },
+        { "tone": "casual",  "text": "netflix pings — later pile" },
+        { "tone": "coarse",  "text": "netflix = batch" }
+      ]
+    },
+    {
+      "id": "action_03",
+      "expected": { "packageName": "com.duolingo", "channelId": null, "category": null, "notFromContact": false, "action": "suppress" },
+      "phrasings": [
+        { "tone": "direct",   "text": "Kill all notifications from Duolingo" },
+        { "tone": "emotional","text": "the duolingo owl is haunting me. make it stop." },
+        { "tone": "casual",   "text": "duolingo no more nags" },
+        { "tone": "vague",    "text": "duo owl shush" }
+      ]
+    },
+
+    {
+      "id": "oos_01",
+      "expected": { "packageName": "com.slack", "channelId": null, "category": null, "notFromContact": false, "action": "suppress" },
+      "phrasings": [
+        { "tone": "direct",  "text": "Mute Slack DMs between 9pm and 7am only" },
+        { "tone": "verbose", "text": "Suppress Slack direct messages during overnight hours from 21:00 through 07:00" },
+        { "tone": "casual",  "text": "no slack dms overnight plz" },
+        { "tone": "nervous", "text": "maybe slack could be off at night? between 9pm and 7am?" }
+      ]
+    },
+    {
+      "id": "oos_02",
+      "expected": { "packageName": "com.google.android.gm", "channelId": null, "category": null, "notFromContact": false, "action": "suppress" },
+      "phrasings": [
+        { "tone": "direct",  "text": "Silence work email on weekends" },
+        { "tone": "emotional","text": "i need MY WEEKENDS. no work gmail sat or sun." },
+        { "tone": "formal",  "text": "Please suppress Gmail notifications during weekend days" },
+        { "tone": "casual",  "text": "gmail sat/sun = nope" }
+      ]
+    },
+    {
+      "id": "oos_03",
+      "expected": { "packageName": null, "channelId": null, "category": null, "notFromContact": false, "action": "suppress" },
+      "acceptable": { "category": [null, "promotional"] },
+      "phrasings": [
+        { "tone": "direct",  "text": "Hide messages that contain the word 'sale'" },
+        { "tone": "verbose", "text": "Suppress any notification whose body text includes the word 'sale' (case insensitive)" },
+        { "tone": "casual",  "text": "if it says 'sale' in the text, hide it" },
+        { "tone": "coarse",  "text": "'sale' = mute" }
+      ]
+    },
+
+    {
+      "id": "unknown_app_01",
+      "expected": { "packageName": null, "channelId": null, "category": null, "notFromContact": false, "action": "suppress" },
+      "phrasings": [
+        { "tone": "direct",  "text": "Mute BeReal" },
+        { "tone": "casual",  "text": "bereal? kill it" },
+        { "tone": "formal",  "text": "Suppress all notifications from the BeReal application" },
+        { "tone": "vague",   "text": "that bereal app, quiet it" }
+      ]
+    },
+    {
+      "id": "unknown_app_02",
+      "expected": { "packageName": null, "channelId": null, "category": null, "notFromContact": false, "action": "suppress" },
+      "phrasings": [
+        { "tone": "direct",   "text": "Silence Threads notifications" },
+        { "tone": "emotional","text": "threads is NOT for me. mute it all." },
+        { "tone": "casual",   "text": "threads pings = no" },
+        { "tone": "coarse",   "text": "threads off" }
+      ]
+    },
+    {
+      "id": "unknown_app_03",
+      "expected": { "packageName": null, "channelId": null, "category": null, "notFromContact": true, "action": "suppress" },
+      "phrasings": [
+        { "tone": "direct",  "text": "Hide Signal messages from strangers" },
+        { "tone": "verbose", "text": "Suppress Signal messenger notifications when the sender is not in my address book" },
+        { "tone": "casual",  "text": "signal randos = hide" },
+        { "tone": "nervous", "text": "signal, when i don't know them, hide please?" }
+      ]
+    },
+
+    {
+      "id": "category_bound_01",
+      "expected": { "packageName": "com.instagram.android", "channelId": null, "category": "engagement_bait", "notFromContact": false, "action": "suppress" },
+      "phrasings": [
+        { "tone": "direct",   "text": "Stop Instagram from suggesting posts I might like" },
+        { "tone": "casual",   "text": "no more 'you might like' instagram crap" },
+        { "tone": "verbose",  "text": "Disable the Instagram notifications that recommend posts or accounts I may be interested in" },
+        { "tone": "emotional","text": "i KNOW what i like, instagram, stop trying to 'suggest' things" }
+      ]
+    },
+    {
+      "id": "category_bound_02",
+      "expected": { "packageName": "com.amazon.mShop.android.shopping", "channelId": null, "category": "promotional", "notFromContact": false, "action": "suppress" },
+      "phrasings": [
+        { "tone": "direct",  "text": "Mute Amazon lightning deals" },
+        { "tone": "coarse",  "text": "amazon deal spam = dead" },
+        { "tone": "formal",  "text": "Suppress Amazon lightning-deal promotional notifications" },
+        { "tone": "casual",  "text": "lightning deal alerts, no" }
+      ]
+    },
+    {
+      "id": "category_bound_03",
+      "expected": { "packageName": null, "channelId": null, "category": "transactional", "notFromContact": false, "action": "suppress" },
+      "phrasings": [
+        { "tone": "direct",  "text": "Silence verification code emails" },
+        { "tone": "verbose", "text": "Suppress transactional notifications such as two-factor verification codes" },
+        { "tone": "casual",  "text": "otp codes, mute" },
+        { "tone": "vague",   "text": "those verify code emails, quiet" }
+      ]
+    },
+    {
+      "id": "category_bound_04",
+      "expected": { "packageName": "com.twitter.android", "channelId": null, "category": "social_signal", "notFromContact": false, "action": "suppress" },
+      "phrasings": [
+        { "tone": "direct",   "text": "Hide Twitter likes and retweets" },
+        { "tone": "emotional","text": "i don't CARE who liked my tweet. mute all that." },
+        { "tone": "casual",   "text": "twitter like/rt pings, mute" },
+        { "tone": "formal",   "text": "Suppress Twitter notifications pertaining to likes and retweets" }
+      ]
+    },
+
+    {
+      "id": "nuanced_01",
+      "expected": { "packageName": "com.linkedin.android", "channelId": null, "category": "engagement_bait", "notFromContact": false, "action": "suppress" },
+      "acceptable": { "category": ["engagement_bait", "social_signal"] },
+      "phrasings": [
+        { "tone": "direct",   "text": "I don't want LinkedIn telling me who viewed my profile" },
+        { "tone": "emotional","text": "LINKEDIN. i do not care who viewed my profile. stop." },
+        { "tone": "casual",   "text": "linkedin 'viewed your profile' stuff, nope" },
+        { "tone": "verbose",  "text": "Please suppress LinkedIn notifications that announce profile-view events" }
+      ]
+    },
+    {
+      "id": "nuanced_02",
+      "expected": { "packageName": "com.amazon.mShop.android.shopping", "channelId": null, "category": null, "notFromContact": false, "action": "queue" },
+      "phrasings": [
+        { "tone": "direct",  "text": "Queue all of Amazon except order updates" },
+        { "tone": "casual",  "text": "amazon, batch everything that isn't an order update" },
+        { "tone": "verbose", "text": "Hold Amazon notifications for later review, unless the notification is an order-status update" },
+        { "tone": "vague",   "text": "amazon mostly later, not orders tho" }
+      ]
+    },
+    {
+      "id": "nuanced_03",
+      "expected": { "packageName": "com.discord", "channelId": null, "category": null, "notFromContact": true, "action": "queue" },
+      "phrasings": [
+        { "tone": "direct",  "text": "Hold Discord notifications from people outside my contacts" },
+        { "tone": "verbose", "text": "Queue for later review any Discord notification whose sender is not present in my contact list" },
+        { "tone": "casual",  "text": "discord randos, save for later" },
+        { "tone": "nervous", "text": "discord, if i don't know them, maybe queue it?" }
+      ]
+    },
+    {
+      "id": "nuanced_04",
+      "expected": { "packageName": "com.reddit.frontpage", "channelId": null, "category": "engagement_bait", "notFromContact": false, "action": "suppress" },
+      "phrasings": [
+        { "tone": "direct",  "text": "Silence Reddit recommendation pushes" },
+        { "tone": "coarse",  "text": "reddit 'you might like' = no" },
+        { "tone": "verbose", "text": "Suppress Reddit notifications that recommend subreddits or posts I may be interested in" },
+        { "tone": "casual",  "text": "reddit recs, mute" }
+      ]
+    },
+    {
+      "id": "text_01",
+      "expected": { "packageName": "com.amazon.mShop.android.shopping", "channelId": null, "category": null, "notFromContact": false, "action": "suppress", "textKeyword": "deal", "textOperator": "contains" },
+      "acceptable": { "textKeyword": ["deal", "deals", "sale", "discount"] },
+      "phrasings": [
+        { "tone": "direct",  "text": "Mute Amazon notifications that mention deals" },
+        { "tone": "casual",  "text": "kill any amazon push with the word deal in it" },
+        { "tone": "verbose", "text": "Suppress notifications from the Amazon shopping app whenever their text contains the word 'deal'" },
+        { "tone": "vague",   "text": "amazon deal spam, gone" }
+      ]
+    },
+    {
+      "id": "text_02",
+      "expected": { "packageName": null, "channelId": null, "category": null, "notFromContact": false, "action": "suppress", "textKeyword": "breaking", "textOperator": "contains" },
+      "acceptable": { "textKeyword": ["breaking", "breaking news"] },
+      "phrasings": [
+        { "tone": "direct",  "text": "Block any notification containing 'breaking'" },
+        { "tone": "emotional","text": "i swear if i see one more 'BREAKING' alert — mute them all" },
+        { "tone": "verbose", "text": "Suppress every notification, regardless of app, whose text includes the word breaking" },
+        { "tone": "casual",  "text": "no more breaking news pings from anything" }
+      ]
+    },
+    {
+      "id": "text_03",
+      "expected": { "packageName": "com.linkedin.android", "channelId": null, "category": null, "notFromContact": false, "action": "suppress", "textKeyword": "viewed your profile", "textOperator": "contains" },
+      "acceptable": { "textKeyword": ["viewed your profile", "viewed", "profile view", "profile"] },
+      "phrasings": [
+        { "tone": "direct",  "text": "Mute LinkedIn 'viewed your profile' notifications" },
+        { "tone": "casual",  "text": "linkedin profile view stuff, mute it" },
+        { "tone": "verbose", "text": "Suppress LinkedIn notifications whose text contains the phrase 'viewed your profile'" },
+        { "tone": "coarse",  "text": "linkedin profile-view noise off" }
+      ]
+    },
+    {
+      "id": "text_04",
+      "expected": { "packageName": "com.amazon.mShop.android.shopping", "channelId": null, "category": null, "notFromContact": false, "action": "queue", "textKeyword": "shipped", "textOperator": "not_contains" },
+      "acceptable": { "textKeyword": ["shipped", "shipping", "delivered", "order"] },
+      "phrasings": [
+        { "tone": "direct",  "text": "Queue Amazon notifications unless they mention 'shipped'" },
+        { "tone": "verbose", "text": "Hold Amazon notifications for later, except the ones whose text includes 'shipped'" },
+        { "tone": "casual",  "text": "amazon stuff later, but not the shipped ones" },
+        { "tone": "vague",   "text": "amazon batch, except shipped = now" }
+      ]
+    },
+    {
+      "id": "text_05",
+      "expected": { "packageName": "com.google.android.gm", "channelId": null, "category": null, "notFromContact": false, "action": "suppress", "textKeyword": "unsubscribe", "textOperator": "contains" },
+      "acceptable": { "textKeyword": ["unsubscribe", "newsletter"] },
+      "phrasings": [
+        { "tone": "direct",  "text": "Mute Gmail notifications that contain 'unsubscribe'" },
+        { "tone": "verbose", "text": "Suppress Gmail alerts whose body text includes the word unsubscribe — that's almost always a newsletter" },
+        { "tone": "casual",  "text": "gmail, if it says unsubscribe, hide it" },
+        { "tone": "coarse",  "text": "gmail + 'unsubscribe' = mute" }
+      ]
+    },
+    {
+      "id": "text_06",
+      "expected": { "packageName": "com.whatsapp", "channelId": null, "category": null, "notFromContact": false, "action": "suppress", "textKeyword": "good morning", "textOperator": "contains" },
+      "acceptable": { "textKeyword": ["good morning", "morning", "gm"] },
+      "phrasings": [
+        { "tone": "direct",  "text": "Mute WhatsApp notifications containing 'good morning'" },
+        { "tone": "casual",  "text": "whatsapp good morning chain, kill it" },
+        { "tone": "verbose", "text": "Suppress WhatsApp notifications whose text contains the greeting 'good morning'" },
+        { "tone": "emotional","text": "if one more whatsapp says 'good morning' i'll scream — mute those" }
+      ]
+    },
+    {
+      "id": "text_07",
+      "expected": { "packageName": null, "channelId": null, "category": null, "notFromContact": false, "action": "suppress", "textKeyword": "opinion", "textOperator": "not_contains" },
+      "acceptable": { "packageName": ["com.economist.lamarr"], "textKeyword": ["opinion", "editorial", "leader"] },
+      "phrasings": [
+        { "tone": "direct",  "text": "From The Economist, mute anything that doesn't mention 'opinion'" },
+        { "tone": "verbose", "text": "For Economist notifications, suppress those whose text does not contain the word opinion" },
+        { "tone": "casual",  "text": "economist: only let the opinion ones through, mute the rest" },
+        { "tone": "vague",   "text": "economist, opinion = ok, everything else = no" }
+      ]
+    },
+    {
+      "id": "text_08",
+      "expected": { "packageName": null, "channelId": null, "category": "promotional", "notFromContact": false, "action": "suppress", "textKeyword": "% off", "textOperator": "contains" },
+      "acceptable": { "textKeyword": ["% off", "off", "percent off", "discount"] },
+      "phrasings": [
+        { "tone": "direct",  "text": "Suppress promotional notifications that say '% off'" },
+        { "tone": "verbose", "text": "Kill any promotional notification whose text contains the substring '% off'" },
+        { "tone": "casual",  "text": "any promo with % off = gone" },
+        { "tone": "coarse",  "text": "promos with '% off' — trash" }
+      ]
+    }
+  ]
+}

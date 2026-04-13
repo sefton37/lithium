@@ -1,0 +1,15 @@
+{
+  "_comment": "Synthetic contact list injected into prompts. Names are fake but varied (first+last, first only, nicknames) so the model sees realistic lookup surface.",
+  "contacts": [
+    "Alice Chen", "Bob Martinez", "Carol Nguyen", "David Kim", "Elena Rossi",
+    "Frank O'Brien", "Grace Park", "Henry Schmidt", "Isabel Garcia", "Jack Wilson",
+    "Kira Thompson", "Liam Patel", "Maya Rodriguez", "Noah Singh", "Olivia Brown",
+    "Pablo Fernandez", "Quinn Anderson", "Rachel Goldman", "Sarah Mitchell", "Tom Nakamura",
+    "Uma Desai", "Victor Chen", "Wendy Foster", "Xander Reyes", "Yasmin Ali",
+    "Zach Walker", "Mom", "Dad", "Brother Mike", "Sister Lisa",
+    "Dr. Patel", "Dentist Office", "Landlord Jim", "Neighbor Kate", "Boss Dan",
+    "HR Teresa", "Team Lead Sam", "CEO Priya", "Recruiter Eva", "Mechanic Ray",
+    "Vet Dr. Lin", "School Carol", "Coach Steve", "Yoga Anna", "Barber Pete",
+    "Plumber Jose", "Electrician Bill", "Babysitter Jen", "Doorman Nick", "Contractor Mo"
+  ]
+}

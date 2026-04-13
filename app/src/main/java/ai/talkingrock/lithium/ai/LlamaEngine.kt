@@ -120,6 +120,76 @@ class LlamaEngine @Inject constructor() {
     }
 
     /** Releases the native model context. */
+    /**
+     * Loads a GGUF model with an explicit context size.
+     *
+     * Intended for generative tasks (rule extraction, chat) that need a larger context
+     * window than the default classification context. Delegates to the primary
+     * [loadModel] after temporarily overriding the context via the [contextSize] param.
+     *
+     * @param modelDir Absolute path to the directory containing the GGUF file.
+     * @param contextSize Token context window size (use [GENERATIVE_CONTEXT_SIZE] for chat).
+     */
+    fun loadModel(modelDir: String, contextSize: Int) {
+        if (!LlamaCpp.isAvailable) {
+            Log.w(TAG, "loadModel: llama.cpp native library not available")
+            return
+        }
+
+        val dir = File(modelDir)
+        if (!dir.exists() || !dir.isDirectory) {
+            Log.w(TAG, "loadModel: directory not found at $modelDir")
+            return
+        }
+
+        val modelFile = dir.listFiles()
+            ?.filter { it.extension == "gguf" }
+            ?.minByOrNull { it.name }
+        if (modelFile == null) {
+            Log.w(TAG, "loadModel: no .gguf file found in $modelDir")
+            return
+        }
+
+        releaseModel()
+
+        val handle = LlamaCpp.loadModel(
+            modelPath = modelFile.absolutePath,
+            contextSize = contextSize,
+            threads = INFERENCE_THREADS
+        )
+
+        if (handle != 0L) {
+            modelHandle = handle
+            Log.i(TAG, "loadModel: loaded ${modelFile.name} (handle=$handle, ctx=$contextSize)")
+        } else {
+            Log.e(TAG, "loadModel: failed to load ${modelFile.name}")
+        }
+    }
+
+    /**
+     * Runs free-form text generation given a [prompt].
+     *
+     * Unlike [classify], this method returns the raw output string without parsing.
+     * Intended for generative tasks (rule extraction, chat) where the caller
+     * is responsible for parsing the output.
+     *
+     * @param prompt Full prompt string to feed to the model.
+     * @param maxTokens Maximum number of tokens to generate.
+     * @return The generated text, or an empty string if inference fails or model not loaded.
+     */
+    suspend fun generate(prompt: String, maxTokens: Int): String {
+        if (modelHandle == 0L) {
+            Log.w(TAG, "generate: model not loaded")
+            return ""
+        }
+        return try {
+            LlamaCpp.runInference(modelHandle, prompt, maxTokens)
+        } catch (e: Exception) {
+            Log.e(TAG, "generate: inference failed", e)
+            ""
+        }
+    }
+
     fun releaseModel() {
         if (modelHandle != 0L) {
             LlamaCpp.freeModel(modelHandle)
@@ -192,6 +262,13 @@ class LlamaEngine @Inject constructor() {
 
         /** Context window size — 512 tokens is plenty for classification prompts. */
         private const val CONTEXT_SIZE = 512
+
+        /**
+         * Larger context window for generative tasks (rule extraction, chat).
+         * Distinct from [CONTEXT_SIZE] so classification and generation can
+         * run with different llama.cpp context configurations if needed.
+         */
+        const val GENERATIVE_CONTEXT_SIZE = 2048
 
         /** Number of CPU threads for inference. Pixel 8 Pro has 8 cores. */
         private const val INFERENCE_THREADS = 4
