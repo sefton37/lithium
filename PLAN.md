@@ -1,5 +1,23 @@
 # Plan: Lithium — Android Notification Manager Implementation
 
+**Status: Historical. Phase 0 and M1–M6 are long complete. Current DB version is 12.**
+
+This document was written for a greenfield project and describes Phase 0 scaffolding
+through M6 polish. Everything through M6 has landed. The active development phase is
+well past this — see the `PLAN_*.md` files for current feature work.
+
+The Phase 0 section (Gradle setup, manifest hardening, DI wiring, Room schema) is
+accurate for understanding the initial architecture decisions. The schema shown in §0.4
+(`version = 1`, 6 entities) is the Phase 0 baseline; the current schema is v12 with
+13 entities. The M1–M6 milestone descriptions remain accurate as historical milestones
+but do not reflect current code detail.
+
+Do not use this document for implementation guidance on any feature. Use it for:
+- Understanding the original architecture intent and security decisions (Phase 0).
+- Understanding what the M1–M6 milestones covered.
+
+---
+
 ## Context
 
 Lithium is a greenfield Android app for notification management, targeting users with ADHD,

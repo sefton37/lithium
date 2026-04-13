@@ -10,7 +10,10 @@ import ai.talkingrock.lithium.data.model.Report
 import ai.talkingrock.lithium.data.model.Suggestion
 import ai.talkingrock.lithium.data.model.AppBattleJudgment
 import ai.talkingrock.lithium.data.model.AppRanking
+import ai.talkingrock.lithium.data.model.ChannelRanking
+import ai.talkingrock.lithium.data.model.ImplicitJudgment
 import ai.talkingrock.lithium.data.model.QueuedNotification
+import ai.talkingrock.lithium.data.model.ScoreQuantiles
 import ai.talkingrock.lithium.data.model.TrainingJudgment
 
 /**
@@ -38,6 +41,9 @@ import ai.talkingrock.lithium.data.model.TrainingJudgment
  * - 7: Quest tracking — added `quest_id` to training_judgments.
  * - 8: App-battle mode — added `app_rankings` and `app_battle_judgments` tables.
  * - 9: Shade Mode Alpha — added `disposition` TEXT column to notifications.
+ * - 10: Channel rankings — added `channel_rankings` table.
+ * - 11: Implicit judgments — added `implicit_judgments` table.
+ * - 12: Score quantiles — added `score_quantiles` table.
  */
 @Database(
     entities = [
@@ -50,9 +56,12 @@ import ai.talkingrock.lithium.data.model.TrainingJudgment
         AppBehaviorProfile::class,
         TrainingJudgment::class,
         AppRanking::class,
-        AppBattleJudgment::class
+        AppBattleJudgment::class,
+        ChannelRanking::class,
+        ImplicitJudgment::class,
+        ScoreQuantiles::class,
     ],
-    version = 9,
+    version = 12,
     exportSchema = true
 )
 abstract class LithiumDatabase : RoomDatabase() {
@@ -66,4 +75,7 @@ abstract class LithiumDatabase : RoomDatabase() {
     abstract fun trainingJudgmentDao(): TrainingJudgmentDao
     abstract fun appRankingDao(): AppRankingDao
     abstract fun appBattleJudgmentDao(): AppBattleJudgmentDao
+    abstract fun channelRankingDao(): ChannelRankingDao
+    abstract fun implicitJudgmentDao(): ImplicitJudgmentDao
+    abstract fun scoreQuantilesDao(): ScoreQuantilesDao
 }

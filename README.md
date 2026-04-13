@@ -2,41 +2,66 @@
 
 **by Talking Rock (talkingrock.ai)**
 
-An Android app that helps people manage their relationship with their phone's notifications. Built for people with ADHD, autism spectrum conditions, and other mental health challenges where notification overload is a real problem.
+An Android app that helps people manage their relationship with their phone's notifications.
+Built for people with ADHD, autism spectrum conditions, and other mental health challenges
+where notification overload is a real problem.
 
-Local-first. Zero-trust. No personal data leaves the device. Open source.
+Local-first. Zero-trust. No personal data leaves the device.
 
 ---
 
 ## What It Does
 
-LITHIUM sits between you and your notifications. It watches what comes in, learns what matters to you based on what you actually do, and helps you take control.
+Lithium sits between you and your notifications. It watches what comes in, learns what
+matters to you based on what you actually do, and helps you take control.
 
-**MVP scope:**
+**Current capabilities:**
 
-1. Observe all incoming notifications and collect metadata (source app, content, category, timestamp, notification channel, priority)
-2. Track what you do with them (tapped, dismissed, ignored, how long until action)
-3. Correlate notifications with app usage (did tapping that notification lead to 2 hours in TikTok?)
-4. On-device AI reviews patterns and classifies notification types
-5. AI generates triage reports and suggestions
-6. You review suggestions in a chat-style interface — yes, no, or write your own comment on each item
-7. Approved suggestions become active filter rules
-
-**The value proposition:** The AI learns from your actual usage — what you tap, what you ignore, what pulls you into hour-long sessions — and uses that to eliminate what is spam *relative to you*. It then proposes what you actually care about based on your behavior, not some generic filter. A DM from a friend passes through. An algorithmic engagement notification you've never once acted on gets killed. Same logic for email — if you never open marketing blasts but always read messages from real people, the AI figures that out and suggests rules accordingly.
-
-This is the program that helps you fight back against attention extraction and budget your time. All on device, always reviewable by you.
+1. Observe all incoming notifications — source app, content, category, channel, priority,
+   timestamp.
+2. Tier-classify each notification at capture time (Invisible / Noise / Worth seeing /
+   Interrupt) using a rule-based classifier (`TierClassifier`) with heuristics for known
+   packages.
+3. Track what you do with them (tapped, dismissed, how long until action; correlates taps
+   with app session duration via `UsageStatsManager`).
+4. On-device AI (`LlamaEngine` / llama.cpp) classifies notifications into six categories
+   (personal, engagement_bait, promotional, transactional, system, social_signal) on a
+   24-hour WorkManager schedule.
+5. Capture implicit pairwise preference signals from notification-shade behavior (taps and
+   dismissals) and feed them into the scoring model via `ScoringRefit`.
+6. Explicit training mode: pairwise notification comparisons and app-vs-app battles that
+   accumulate `TrainingJudgment` rows and update `AppRanking` and `ChannelRanking` Elo scores.
+7. Hierarchical scoring (`Scorer`): per-(pkg, channel) importance score `s ∈ [0,1]` from
+   app Elo + channel Elo shrinkage + category bias + behavioral prior.
+8. Tier reassignment via user-quantile thresholds recomputed nightly (`TierMapper` +
+   `ScoreQuantiles`).
+9. AI generates triage reports and rule suggestions; the user reviews them in the Briefing
+   tab and promotes suggestions to active rules.
+10. Chat tab: interactive rule creation via on-device LLM per-field extraction
+    (`RuleExtractor`). **Note: the Chat tab exists in code but is not yet wired into
+    navigation. It is unreachable in the current build.** See `PLAN_CHAT_TAB_RESTRUCTURE.md`.
+11. Local API server (`LithiumApiServer`, Ktor CIO on port 8400) exposes notification data
+    over Tailscale for integration with Cairn. Requires the INTERNET permission.
+12. Onboarding flow: six-page `HorizontalPager` (Welcome → Privacy → Notification Access →
+    Usage Access → Contacts → Learning Period).
 
 ---
 
 ## Design Principles
 
-**Light.** Small APK. Low memory footprint. No background battery drain outside scheduled AI work. The app should feel like it barely exists until you want it.
+**Light.** Small APK. Low memory footprint. No background battery drain outside scheduled
+AI work. The app should feel like it barely exists until you want it.
 
-**Minimalist.** One-screen daily briefing. Chat interface for decisions. A settings page. That's it. No dashboards, no gamification, no engagement metrics trying to keep you in the app that's supposed to get you off your phone.
+**Minimalist.** Daily briefing. Chat interface for decisions. Training tab for preference
+feedback. A settings page. No dashboards, no gamification, no engagement metrics trying
+to keep you in the app that's supposed to get you off your phone.
 
-**Smart.** The tech choices serve the mission. Small quantized models, not big ones. SQLite, not a graph database. Kotlin and Compose, not a cross-platform framework. Every dependency earns its place.
+**Smart.** Small quantized GGUF models, not big ones. SQLite, not a graph database.
+Kotlin and Compose, not a cross-platform framework. Every dependency earns its place.
 
-**Secure.** Database encrypted at rest. No network permissions by default. Diagnostics are opt-in, reviewable before send, and contain zero personal data. The threat model assumes the user trusts nobody, including us.
+**Secure.** Database encrypted at rest (Room + SQLCipher AES-256). The API server is
+Tailscale-only. No auth on the API server yet — see Phase 2 of the API roadmap.
+Diagnostics are opt-in and contain zero personal data.
 
 ---
 
@@ -45,18 +70,19 @@ This is the program that helps you fight back against attention extraction and b
 | Layer | Choice | Why |
 |-------|--------|-----|
 | Language | Kotlin | Native Android, no cross-platform overhead |
-| UI | Jetpack Compose + Material 3 | Declarative, minimal, good accessibility support built in |
-| Database | Room + SQLCipher | Local SQLite with AES-256 encryption at rest |
+| UI | Jetpack Compose + Material 3 | Declarative, minimal, good accessibility support |
+| Database | Room + SQLCipher v12 | Local SQLite with AES-256 encryption at rest |
 | Preferences | Jetpack Security EncryptedSharedPreferences | Settings and config encrypted |
-| AI Runtime | ONNX Runtime Android | Lightweight, well-supported for small models on mobile |
-| AI Model | Qwen3-0.6B (Q4_K_M quantized) | ~400MB, runs on mid-range phones, good at classification tasks |
-| Background | WorkManager | Respects battery, runs AI only on charge + idle |
+| AI Runtime | llama.cpp (JNI via `LlamaCpp.kt`) | GGUF models, runs on-device, no cloud |
+| AI Model | GGUF Q4_K_M (sideloaded; SmolLM-135M to Qwen2.5-1.5B evaluated) | See MODEL_EVAL.md |
+| Background | WorkManager (24h, charging+idle) | AI analysis, scoring refit, tier backfill |
+| API Server | Ktor CIO embedded (port 8400) | Tailscale-only; exposes DB over local network |
 | DI | Hilt | Standard, minimal boilerplate |
-| Build | Gradle KTS | Type-safe build config |
+| Build | Gradle KTS, compileSdk 35, minSdk 29, targetSdk 35 | |
 
-**No network libraries.** No Retrofit, no OkHttp in the main app. The optional diagnostics module is the only component with network access and it is a separate Gradle module that can be excluded from the build entirely.
-
-**Target:** Android 10+ (API 29+). Covers ~90% of active devices and gives us UsageStatsManager, notification channels, and modern privacy APIs.
+**INTERNET permission is present** (added for the Phase 1 API server). The app is no
+longer zero-network in the main process. Traffic is restricted to Tailscale by network
+policy, not by manifest.
 
 ---
 
@@ -66,630 +92,242 @@ This is the program that helps you fight back against attention extraction and b
 ┌──────────────────────────────────────────────────────────┐
 │                       LITHIUM App                          │
 │                                                          │
-│  ┌────────────────┐ ┌──────────────┐ ┌───────────────┐  │
-│  │  Notification   │ │    Usage     │ │   Contacts    │  │
-│  │  Listener       │ │    Tracker   │ │   Resolver    │  │
-│  │  Service        │ │              │ │               │  │
-│  └───────┬────────┘ └──────┬───────┘ └───────┬───────┘  │
-│          │                 │                  │          │
-│          ▼                 ▼                  ▼          │
-│  ┌──────────────────────────────────────────────────┐   │
-│  │         Encrypted Local Database (Room+SQLCipher) │   │
-│  │  notifications | sessions | rules | reports | queue│  │
-│  └─────────────────────┬────────────────────────────┘   │
-│                        │                                 │
-│              ┌─────────┴──────────┐                      │
-│              ▼                    ▼                       │
-│  ┌──────────────────┐  ┌──────────────────┐             │
-│  │  Rule Engine      │  │  AI Engine       │             │
-│  │  (real-time)      │  │  (WorkManager)   │             │
-│  │  applies approved │  │  runs on charge  │             │
-│  │  rules to inbound │  │  classifies,     │             │
-│  │  notifications    │  │  reports,        │             │
-│  └──────────────────┘  │  suggests         │             │
-│                        └────────┬─────────┘             │
-│                                 │                        │
-│                                 ▼                        │
-│  ┌──────────────────────────────────────────────────┐   │
-│  │              Chat UI (Jetpack Compose)             │   │
-│  │  Morning briefing → suggestion cards → yes/no/edit │   │
-│  │  Active rules list → manual overrides              │   │
-│  │  Queued notifications → batch review               │   │
-│  └──────────────────────────────────────────────────┘   │
+│  ┌─────────────────┐  ┌──────────────┐  ┌────────────┐  │
+│  │  Notification    │  │    Usage     │  │  Contacts  │  │
+│  │  Listener        │  │    Tracker   │  │  Resolver  │  │
+│  │  Service         │  │              │  │            │  │
+│  └────────┬─────────┘  └──────┬───────┘  └──────┬─────┘  │
+│           │ capture+tier      │ session          │ contact│
+│           ▼                   ▼                  ▼        │
+│  ┌──────────────────────────────────────────────────┐    │
+│  │    Encrypted Local Database (Room+SQLCipher v12)  │    │
+│  │  notifications | sessions | rules | reports       │    │
+│  │  training_judgments | app_rankings | channel_     │    │
+│  │  rankings | implicit_judgments | score_quantiles  │    │
+│  │  app_behavior_profiles | notification_channels*   │    │
+│  └──────────────────┬──────────────────────────────┘    │
+│                     │                                     │
+│          ┌──────────┴─────────────┐                      │
+│          ▼                        ▼                       │
+│  ┌────────────────┐   ┌────────────────────────────┐     │
+│  │  Rule Engine    │   │  AI Engine (WorkManager)   │     │
+│  │  (real-time)    │   │  - NotificationClassifier  │     │
+│  │  Heuristic tier │   │  - PatternAnalyzer         │     │
+│  │  + learned score│   │  - ReportGenerator         │     │
+│  │  + approved rules│  │  - SuggestionGenerator     │     │
+│  └────────────────┘   │  - ScoringRefit             │     │
+│                        └──────────┬─────────────────┘     │
+│                                   │                        │
+│                                   ▼                        │
+│  ┌──────────────────────────────────────────────────┐    │
+│  │            UI (Jetpack Compose)                    │    │
+│  │  Briefing (home) | Training | Queue | Rules       │    │
+│  │  Settings | Setup | Chat (built, not yet wired)   │    │
+│  └──────────────────────────────────────────────────┘    │
 │                                                          │
-│  ┌──────────────────────────────────────────────────┐   │
-│  │        Diagnostics Module (OPTIONAL, OPT-IN)      │   │
-│  │  Separate Gradle module. No personal data.         │   │
-│  │  Crash reports, ANRs, performance metrics only.    │   │
-│  │  All payloads reviewable in-app before send.       │   │
-│  │  Default: OFF. Must explicitly opt in.             │   │
-│  └──────────────────────────────────────────────────┘   │
+│  ┌──────────────────────────────────────────────────┐    │
+│  │   API Server (Ktor CIO :8400, Tailscale-only)    │    │
+│  │   LithiumApiServer + LithiumApiService           │    │
+│  └──────────────────────────────────────────────────┘    │
 └──────────────────────────────────────────────────────────┘
 
-Network access: NONE by default.
-Only the diagnostics module can reach the network, only if opted in.
+* notification_channels entity exists but is not registered in LithiumDatabase.kt (bug).
 ```
 
 ---
 
-## Component Details
-
-### 1. Notification Listener Service
-
-Android's `NotificationListenerService`. Requires user to explicitly grant notification access in Settings.
-
-**What it captures per notification:**
-- Package name (which app)
-- Notification channel ID and category
-- Title and text content
-- Priority level
-- Timestamp posted and removed
-- Removal reason (dismissed, tapped, app-cancelled, timeout)
-- Notification extras (people, messages, conversation status)
-- Group key (bundled notifications)
-- Whether sender is in contacts (via Contacts Resolver)
-
-**What it can do:**
-- Cancel (suppress) individual notifications
-- Snooze notifications
-- Read all active notifications and their rankings
-
-```kotlin
-// Manifest
-<service
-    android:name=".service.LithiumNotificationListener"
-    android:label="@string/notification_listener_label"
-    android:exported="false"
-    android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
-    <intent-filter>
-        <action android:name="android.service.notification.NotificationListenerService" />
-    </intent-filter>
-</service>
-```
-
-```kotlin
-class LithiumNotificationListener : NotificationListenerService() {
-
-    @Inject lateinit var notificationRepo: NotificationRepository
-    @Inject lateinit var ruleEngine: RuleEngine
-    @Inject lateinit var contactsResolver: ContactsResolver
-
-    override fun onNotificationPosted(sbn: StatusBarNotification) {
-        val record = NotificationRecord(
-            key = sbn.key,
-            packageName = sbn.packageName,
-            postedAt = sbn.postTime,
-            title = sbn.notification.extras.getString(Notification.EXTRA_TITLE),
-            text = sbn.notification.extras.getCharSequence(Notification.EXTRA_TEXT)?.toString(),
-            category = sbn.notification.category,
-            channelId = sbn.notification.channelId,
-            priority = sbn.notification.priority,
-            isOngoing = sbn.isOngoing,
-            groupKey = sbn.groupKey,
-            isFromContact = contactsResolver.isSenderInContacts(sbn)
-        )
-
-        notificationRepo.insert(record)
-
-        when (ruleEngine.evaluate(record)) {
-            RuleAction.SUPPRESS -> cancelNotification(sbn.key)
-            RuleAction.QUEUE -> {
-                cancelNotification(sbn.key)
-                notificationRepo.enqueue(record)
-            }
-            RuleAction.ALLOW -> { /* pass through */ }
-        }
-    }
-
-    override fun onNotificationRemoved(
-        sbn: StatusBarNotification,
-        rankingMap: RankingMap,
-        reason: Int
-    ) {
-        notificationRepo.recordRemoval(
-            key = sbn.key,
-            removedAt = System.currentTimeMillis(),
-            reason = reason // REASON_CLICK, REASON_CANCEL, REASON_LISTENER_CANCEL, etc.
-        )
-    }
-}
-```
-
-### 2. Usage Tracker
-
-`UsageStatsManager` correlates notification taps with app sessions.
-
-**Permission:** `PACKAGE_USAGE_STATS` — user grants in Settings > Security > Apps with usage access.
-
-**Core logic:** When a notification is tapped (removal reason = REASON_CLICK), query usage events to find if the source app moved to foreground within a short window. Record session duration. This answers: "That Instagram notification led to a 47-minute session."
-
-```kotlin
-class UsageTracker(context: Context) {
-
-    private val usm = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
-
-    fun measureSessionAfterTap(packageName: String, tapTime: Long): SessionRecord? {
-        val events = usm.queryEvents(tapTime, tapTime + TimeUnit.HOURS.toMillis(4))
-        val event = UsageEvents.Event()
-        var start: Long? = null
-
-        while (events.hasNextEvent()) {
-            events.getNextEvent(event)
-            if (event.packageName != packageName) continue
-
-            if (event.eventType == UsageEvents.Event.ACTIVITY_RESUMED && start == null) {
-                if (event.timeStamp - tapTime < 5000) start = event.timeStamp
-            }
-            if (event.eventType == UsageEvents.Event.ACTIVITY_PAUSED && start != null) {
-                return SessionRecord(packageName, start, event.timeStamp)
-            }
-        }
-        return null
-    }
-}
-```
-
-### 3. Contacts Resolver
-
-Checks if a notification's sender is someone in your contacts.
-
-**Permission:** `READ_CONTACTS`
-
-Extracts sender info from notification extras (MessagingStyle, email headers) and looks it up against the device contact list. Returns a boolean: known person or not.
-
-This is one of the core signal dimensions. A DM from a friend and a push from an algorithm are fundamentally different.
-
-### 4. Accessibility Service (Phase 2 — not MVP)
-
-For deeper interaction tracking (which notifications were tapped from heads-up vs notification shade, what was in foreground when the notification arrived).
-
-**Google Play classification:** This app qualifies as a cognitive accessibility tool. Google's policy explicitly states tools for "cognitive impairments or multiple disabilities" qualify for `isAccessibilityTool="true"`. That designation exempts the app from the prohibition on autonomous AI actions through the Accessibility API.
-
-**Not needed for MVP.** NotificationListenerService + UsageStatsManager gives enough signal to start.
-
-### 5. Local Database
-
-Room + SQLCipher. All data encrypted at rest with AES-256. Database key derived from Android Keystore. The database file is meaningless without the key.
-
-**Schema:**
-
-```sql
-CREATE TABLE notifications (
-    key TEXT PRIMARY KEY,
-    package_name TEXT NOT NULL,
-    posted_at INTEGER NOT NULL,
-    removed_at INTEGER,
-    removal_reason INTEGER,
-    title TEXT,
-    text_content TEXT,
-    category TEXT,
-    channel_id TEXT,
-    priority INTEGER,
-    is_ongoing INTEGER NOT NULL DEFAULT 0,
-    group_key TEXT,
-    is_from_contact INTEGER NOT NULL DEFAULT 0,
-    ai_classification TEXT,
-    ai_confidence REAL
-);
-
-CREATE TABLE sessions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    notification_key TEXT REFERENCES notifications(key),
-    package_name TEXT NOT NULL,
-    session_start INTEGER NOT NULL,
-    session_end INTEGER NOT NULL,
-    duration_ms INTEGER NOT NULL
-);
-
-CREATE TABLE rules (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    created_at INTEGER NOT NULL,
-    source TEXT NOT NULL,           -- 'ai' or 'user'
-    status TEXT NOT NULL,           -- 'proposed', 'approved', 'rejected', 'disabled'
-    rule_type TEXT NOT NULL,        -- 'suppress', 'queue', 'allow'
-    target_package TEXT,            -- null = all
-    target_channel TEXT,            -- null = all
-    condition_json TEXT NOT NULL,
-    description TEXT NOT NULL,      -- human-readable
-    user_comment TEXT,
-    approved_at INTEGER
-);
-
-CREATE TABLE reports (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    generated_at INTEGER NOT NULL,
-    report_text TEXT NOT NULL,
-    reviewed INTEGER NOT NULL DEFAULT 0
-);
-
-CREATE TABLE suggestions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    report_id INTEGER REFERENCES reports(id),
-    suggestion_text TEXT NOT NULL,
-    proposed_rule_json TEXT,
-    status TEXT NOT NULL DEFAULT 'pending', -- 'pending', 'approved', 'rejected'
-    user_comment TEXT
-);
-
-CREATE TABLE queue (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    notification_key TEXT REFERENCES notifications(key),
-    queued_at INTEGER NOT NULL,
-    reviewed INTEGER NOT NULL DEFAULT 0,
-    review_action TEXT
-);
-```
-
-**Data retention:** User-configurable. Default 30 days rolling. User can purge all data at any time from settings.
-
-### 6. Rule Engine
-
-Lightweight, deterministic. Runs synchronously in the notification listener callback. Must be fast — this is on the critical path of every notification.
-
-No AI in the hot path. The rule engine only applies rules the user has already approved.
-
-```kotlin
-class RuleEngine(private val ruleRepo: RuleRepository) {
-
-    fun evaluate(notification: NotificationRecord): RuleAction {
-        val rules = ruleRepo.getApprovedRules() // cached in memory, refreshed on change
-
-        for (rule in rules) {
-            if (rule.matches(notification)) {
-                return rule.action
-            }
-        }
-        return RuleAction.ALLOW // default: let everything through
-    }
-}
-```
-
-First match wins. Default is ALLOW. The app never suppresses anything the user hasn't explicitly approved.
-
-### 7. On-Device AI Engine
-
-**Model:** Qwen3-0.6B, quantized Q4_K_M (~400MB). Runs on any phone made in the last 3-4 years.
-
-**Runtime:** ONNX Runtime for Android.
-
-**Schedule:** WorkManager, once per day:
-
-```kotlin
-val aiWork = PeriodicWorkRequestBuilder<AiAnalysisWorker>(24, TimeUnit.HOURS)
-    .setConstraints(
-        Constraints.Builder()
-            .setRequiresCharging(true)
-            .setRequiresBatteryNotLow(true)
-            .setRequiresDeviceIdle(true)
-            .build()
-    )
-    .build()
-
-WorkManager.getInstance(context).enqueueUniquePeriodicWork(
-    "lithium_ai_analysis",
-    ExistingPeriodicWorkPolicy.KEEP,
-    aiWork
-)
-```
-
-Runs overnight while the phone charges. Not during active use.
-
-**What the AI does each cycle:**
-
-1. **Classify** — Tag each notification from the past 24h:
-   - `personal` — from a known contact, direct message
-   - `engagement_bait` — algorithmic (suggested content, stories, recommendations)
-   - `promotional` — marketing, sales, deals
-   - `transactional` — delivery, 2FA, ride status, payment confirmations
-   - `system` — OS updates, battery, storage
-   - `social_signal` — likes, comments, follows (from contacts vs strangers)
-
-2. **Analyze** — Patterns:
-   - Notifications per app, how many ignored vs acted on
-   - Which types led to long unplanned app sessions
-   - Time-of-day patterns
-   - Contact vs algorithmic ratio per app
-
-3. **Report** — Plain-language summary. Short. Written for someone who might be overwhelmed, not for a data analyst.
-
-4. **Suggest** — Proposed rules, each one specific and actionable. Each becomes a card in the chat UI.
-
-**AI prompt template:**
-
-```
-You are a notification analyst running locally on a phone. You help the user
-manage notification overload. No data leaves the device.
-
-Below is a summary of the user's notification data for the past 24 hours.
-
-Produce:
-1. A brief report (3-5 sentences, plain language)
-2. A list of suggestions as JSON:
-   {
-     "text": "human-readable suggestion",
-     "rule": {
-       "type": "suppress|queue|allow",
-       "package": "com.example.app or null",
-       "channel": "channel_id or null",
-       "condition": { ... }
-     },
-     "reasoning": "one sentence why"
-   }
-
-Be conservative. Only suggest suppressing things the user clearly doesn't engage with.
-Never suppress transactional or personal messages unless data is overwhelming.
-When in doubt, suggest 'queue' instead of 'suppress'.
-
-DATA:
-{notification_summary_json}
-```
-
-### 8. Chat UI
-
-Jetpack Compose. Material 3. Minimal.
-
-**Screens:**
-
-1. **Briefing** (home) — Morning report. AI summary text. Suggestion cards with Yes / No / Comment buttons. If no new report: "No new report. Check back tomorrow." and the queue count.
-
-2. **Queue** — Held notifications. Swipe to dismiss or tap to open. Batch clear option.
-
-3. **Rules** — Active rules. Toggle on/off. Tap to edit or delete. Add manual rule.
-
-4. **Settings** — Permissions status, data retention, purge all data, diagnostics opt-in, about/licenses.
-
-**Design language:**
-- Dark mode default (sensory sensitivity)
-- High contrast text
-- No animations except functional transitions
-- Large tap targets
-- No red notification badges anywhere in the app
-- Monochrome accent, user-configurable
-- System font, no custom typefaces
-- No onboarding wizard — first launch is a single screen with permission buttons
-
-### 9. Security
-
-**Threat model:** The user trusts nobody. Not other apps, not us, not the network.
-
-| Threat | Mitigation |
-|--------|------------|
-| Data at rest | SQLCipher AES-256. Key in Android Keystore. |
-| Other apps reading our data | App-private storage. No exported content providers. No exported activities except launcher. |
-| Network exfiltration | No INTERNET permission in main app. Diagnostics is separate module, opt-in. |
-| Backup leaking data | `android:allowBackup="false"` and `android:fullBackupContent="false"` |
-| Screen capture / overlay | `FLAG_SECURE` on windows with notification content |
-| Debug leaks | ProGuard/R8 in release. No notification content in logs for release builds. |
-| Compromised diagnostics | Payloads are schema-enforced. No personal data fields exist in the schema. Viewable in-app before send. |
-
-**Manifest hardening:**
-
-```xml
-<application
-    android:allowBackup="false"
-    android:fullBackupContent="false"
-    android:dataExtractionRules="@xml/data_extraction_rules"
-    android:usesCleartextTraffic="false">
-</application>
-```
-
-```xml
-<!-- data_extraction_rules.xml -->
-<data-extraction-rules>
-    <cloud-backup>
-        <exclude domain="root" />
-        <exclude domain="database" />
-        <exclude domain="sharedpref" />
-    </cloud-backup>
-    <device-transfer>
-        <exclude domain="database" />
-    </device-transfer>
-</data-extraction-rules>
-```
-
-### 10. Diagnostics Module
-
-Separate Gradle feature module: `:diagnostics`
-
-**Default state:** OFF. Not active. No network calls. Nothing sent until you open the app, go to Settings, and explicitly opt in.
-
-**Opt-in flow:** Settings > Diagnostics > toggle on. Shows full explanation of what will be sent. "Review before sending" option lets you inspect the exact JSON payload.
-
-**What it sends:**
-- App version, Android version, device model
-- Crash stack traces (notification content is never in stack traces)
-- ANR reports
-- AI inference duration and model load time
-- WorkManager job completion status and duration
-- Database size (row counts only, not content)
-- Rule engine evaluation time (p50/p95)
-
-**What it never sends:**
-- Notification content (titles, text, sender info)
-- Package names of apps on the device
-- Contact information
-- Usage patterns or session data
-- Anything from the notifications, sessions, queue, or suggestions tables
-
-**Reviewable:** Every payload can be inspected in-app before transmission. What you see is what gets sent. No fields added after review.
-
-**Destination:** `https://diagnostics.talkingrock.ai` — minimal endpoint, structured JSON, open source server.
-
-**Build exclusion:** The diagnostics module is a dynamic feature module. Build without it and the app has zero network capability:
+## Database Schema (v12)
+
+| Table | Purpose |
+|-------|---------|
+| `notifications` | Every notification captured by the listener. Tier + AI classification columns. |
+| `sessions` | App sessions correlated to notification taps via UsageStatsManager. |
+| `rules` | Active filter rules. `source` = user or ai. `status` = pending_review / approved. |
+| `reports` | AI-generated daily briefing reports. |
+| `suggestions` | Rule suggestions linked to reports. |
+| `queue` | Notifications held for batch review. |
+| `app_behavior_profiles` | Per-(pkg, channel) behavioral stats: tap rate, dismiss rate, session data, category votes. |
+| `training_judgments` | Explicit pairwise comparisons from the Training tab. Includes channel columns (v10). |
+| `app_rankings` | Per-package Elo ratings from app-battle mode. |
+| `app_battle_judgments` | Raw app-vs-app battle outcomes. |
+| `channel_rankings` | Per-(pkg, channel) Elo ratings from channel-pair training. |
+| `implicit_judgments` | Weak pairwise signals from notification-shade taps and dismissals (v12). |
+| `score_quantiles` | Nightly user-quantile thresholds for tier assignment (v12). |
+| `notification_channels` | Channel display-name cache. **Entity exists but not registered in DB — bug.** |
+
+Migration history: v1 (scaffold) → v2 (contacts) → v3 (behavior profiles) → v4 (tiers) →
+v5 (training) → v6 (XP) → v7 (quests) → v8 (app battles) → v9 (disposition column) →
+v10 (channel rankings + channel training columns) → v11 (implicit judgments) → v12 (score quantiles).
+
+---
+
+## Permissions
+
+| Permission | Purpose | How granted |
+|------------|---------|-------------|
+| `BIND_NOTIFICATION_LISTENER_SERVICE` | Read all notifications | Settings > Notification access |
+| `PACKAGE_USAGE_STATS` | Correlate taps with app sessions | Settings > Usage access |
+| `READ_CONTACTS` | Distinguish contact vs. algorithmic notifications | Runtime dialog |
+| `INTERNET` | Ktor API server on port 8400 (Tailscale-only) | Auto-granted |
+| `FOREGROUND_SERVICE` + `FOREGROUND_SERVICE_DATA_SYNC` | Keep listener + API service alive | Auto-granted |
+| `RECEIVE_BOOT_COMPLETED` | Restart listener after reboot | Auto-granted |
+| `POST_NOTIFICATIONS` | Data-readiness notification + reconnect nudge | Runtime dialog (onboarding) |
+
+---
+
+## AI Model Setup
+
+The model is not bundled in the APK. Sideload via ADB into the app's private storage:
 
 ```bash
-./gradlew :app:assembleRelease -PexcludeDiagnostics=true
+# Push to staging area
+adb push ~/lithium-models/smollm2-135m-instruct-q4_k_m.gguf /sdcard/Download/current.gguf
+
+# Copy to app-private storage
+adb shell "run-as ai.talkingrock.lithium.debug sh -c \
+  'mkdir -p files/models && cat /sdcard/Download/current.gguf > files/models/llm_v1.gguf'"
+
+adb shell "rm /sdcard/Download/current.gguf"
+adb shell am force-stop ai.talkingrock.lithium.debug
 ```
+
+`LlamaEngine` loads the alphabetically-first `.gguf` file in `filesDir/models/`.
+
+See `MODEL_EVAL.md` for candidate models and the eval harness. The eval dataset
+(`app/src/main/assets/eval/`) has not been created yet.
 
 ---
 
-## Permissions Summary
+## Build and Run
 
-| Permission | Required | Why | How granted |
-|------------|----------|-----|-------------|
-| `BIND_NOTIFICATION_LISTENER_SERVICE` | Yes | Read and manage notifications | Settings > Notification access |
-| `PACKAGE_USAGE_STATS` | Yes | Correlate notification taps with app sessions | Settings > Usage access |
-| `READ_CONTACTS` | Recommended | Distinguish messages from contacts vs strangers | Runtime permission dialog |
-| `FOREGROUND_SERVICE` | Yes | Keep notification listener alive | Auto-granted |
-| `RECEIVE_BOOT_COMPLETED` | Yes | Restart listener after reboot | Auto-granted |
-| `INTERNET` | No | Only in diagnostics module, only if opted in | Auto-granted but module inactive by default |
+```bash
+git clone <repo-url>
+cd Lithium
+
+# Build debug APK
+./gradlew :app:assembleDebug
+
+# Install to connected device
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+
+# Or via Gradle
+./gradlew :app:installDebug
+```
+
+**Requirements:**
+- Android Studio Hedgehog+ or JDK 17+
+- Android SDK 35+
+- Physical device for testing (notification listener does not work reliably in emulators)
+- ADB access for model sideloading
 
 ---
 
 ## Project Structure
 
 ```
-lithium/
-├── app/                           # Main application module
-│   ├── src/main/
-│   │   ├── java/ai/talkingrock/lithium/
-│   │   │   ├── LithiumApp.kt
-│   │   │   ├── service/
-│   │   │   │   ├── LithiumNotificationListener.kt
-│   │   │   │   └── BootReceiver.kt
-│   │   │   ├── data/
-│   │   │   │   ├── db/
-│   │   │   │   │   ├── LithiumDatabase.kt
-│   │   │   │   │   ├── NotificationDao.kt
-│   │   │   │   │   ├── RuleDao.kt
-│   │   │   │   │   ├── ReportDao.kt
-│   │   │   │   │   ├── QueueDao.kt
-│   │   │   │   │   └── SessionDao.kt
-│   │   │   │   ├── model/
-│   │   │   │   │   ├── NotificationRecord.kt
-│   │   │   │   │   ├── SessionRecord.kt
-│   │   │   │   │   ├── Rule.kt
-│   │   │   │   │   ├── Report.kt
-│   │   │   │   │   ├── Suggestion.kt
-│   │   │   │   │   └── QueuedNotification.kt
-│   │   │   │   └── repository/
-│   │   │   │       ├── NotificationRepository.kt
-│   │   │   │       ├── RuleRepository.kt
-│   │   │   │       └── ReportRepository.kt
-│   │   │   ├── engine/
-│   │   │   │   ├── RuleEngine.kt
-│   │   │   │   ├── RuleMatcher.kt
-│   │   │   │   ├── ContactsResolver.kt
-│   │   │   │   └── UsageTracker.kt
-│   │   │   ├── ai/
-│   │   │   │   ├── AiAnalysisWorker.kt
-│   │   │   │   ├── AiEngine.kt
-│   │   │   │   ├── NotificationClassifier.kt
-│   │   │   │   ├── PatternAnalyzer.kt
-│   │   │   │   ├── ReportGenerator.kt
-│   │   │   │   └── SuggestionGenerator.kt
-│   │   │   ├── ui/
-│   │   │   │   ├── theme/
-│   │   │   │   │   ├── Theme.kt
-│   │   │   │   │   ├── Color.kt
-│   │   │   │   │   └── Type.kt
-│   │   │   │   ├── briefing/
-│   │   │   │   │   ├── BriefingScreen.kt
-│   │   │   │   │   ├── BriefingViewModel.kt
-│   │   │   │   │   └── SuggestionCard.kt
-│   │   │   │   ├── queue/
-│   │   │   │   │   ├── QueueScreen.kt
-│   │   │   │   │   └── QueueViewModel.kt
-│   │   │   │   ├── rules/
-│   │   │   │   │   ├── RulesScreen.kt
-│   │   │   │   │   └── RulesViewModel.kt
-│   │   │   │   ├── settings/
-│   │   │   │   │   ├── SettingsScreen.kt
-│   │   │   │   │   └── SettingsViewModel.kt
-│   │   │   │   └── setup/
-│   │   │   │       └── SetupScreen.kt
-│   │   │   └── di/
-│   │   │       ├── AppModule.kt
-│   │   │       ├── DatabaseModule.kt
-│   │   │       └── AiModule.kt
-│   │   ├── res/
-│   │   └── AndroidManifest.xml
-│   └── build.gradle.kts
-├── diagnostics/                    # Optional feature module
-│   ├── src/main/
-│   │   ├── java/ai/talkingrock/lithium/diagnostics/
-│   │   │   ├── DiagnosticsManager.kt
-│   │   │   ├── PayloadBuilder.kt
-│   │   │   ├── PayloadReviewer.kt
-│   │   │   └── DiagnosticsUploader.kt
-│   │   └── AndroidManifest.xml     # Only module with INTERNET permission
-│   └── build.gradle.kts
-├── model/
-│   └── README.md                   # Instructions for model download
-├── build.gradle.kts
-├── settings.gradle.kts
-├── LICENSE
-└── README.md
+Lithium/
+├── app/src/main/java/ai/talkingrock/lithium/
+│   ├── LithiumApp.kt               # Hilt root, starts API service
+│   ├── MainActivity.kt             # Single-Activity, Compose nav host
+│   ├── api/                        # LithiumApiServer (Ktor), LithiumApiService
+│   ├── ai/
+│   │   ├── AiAnalysisWorker.kt     # 24h WorkManager job (classify → report → score refit)
+│   │   ├── LlamaEngine.kt          # llama.cpp wrapper; classify() + generate()
+│   │   ├── LlamaCpp.kt             # JNI bridge to native llama.cpp
+│   │   ├── NotificationClassifier.kt  # 6-category classification + profile adjustment
+│   │   ├── BriefingService.kt      # On-demand report generation (used by Chat tab)
+│   │   ├── RuleExtractor.kt        # Per-field LLM extraction for rule creation
+│   │   ├── scoring/
+│   │   │   ├── Scorer.kt           # s(x) pipeline: Elo shrinkage + category bias
+│   │   │   ├── ScoringRefit.kt     # Elo replay + category weight fit + quantile recompute
+│   │   │   └── TierMapper.kt       # Score → tier via user quantiles
+│   │   └── eval/
+│   │       ├── ModelEvalHarness.kt # Eval runner (dataset not yet created)
+│   │       └── EvalDataset.kt
+│   ├── classification/
+│   │   └── TierClassifier.kt       # Rule-based tier assignment (cold-start fallback)
+│   ├── data/
+│   │   ├── Prefs.kt                # SharedPreferences key constants
+│   │   ├── db/                     # LithiumDatabase (v12), all DAOs
+│   │   ├── model/                  # Room entities
+│   │   └── repository/             # Repository layer
+│   ├── di/                         # Hilt modules (App, Database, AI)
+│   ├── engine/
+│   │   ├── RuleEngine.kt           # Deterministic rule evaluation (hot path)
+│   │   ├── ContactsResolver.kt
+│   │   └── UsageTracker.kt
+│   ├── service/
+│   │   ├── LithiumNotificationListener.kt  # Core notification capture + implicit signals
+│   │   ├── BootReceiver.kt
+│   │   └── DataReadinessNotifier.kt
+│   └── ui/
+│       ├── briefing/               # Briefing tab (home, still active — Chat not wired yet)
+│       ├── chat/                   # Chat tab (built, not wired into nav)
+│       ├── training/               # Training tab (pairwise comparisons + app battles)
+│       ├── queue/                  # Queued notifications review
+│       ├── rules/                  # Active rules + add rule
+│       ├── settings/               # Settings, data purge, diagnostics
+│       ├── setup/                  # 6-page onboarding pager
+│       └── eval/                   # Model eval screen (debug only)
+├── diagnostics/                    # Optional Gradle module; INTERNET for dev tooling
+├── app/schemas/                    # Room schema exports (v1–v12 JSON)
+└── app/src/main/assets/
+    └── eval/                       # DOES NOT EXIST YET — needed for MODEL_EVAL.md
 ```
 
 ---
 
-## AI Model Setup
+## Known Issues / Active Gaps
 
-The model is not bundled in the APK. On first launch, the app prompts to download to device-local storage.
+1. **`notification_channels` table missing from DB.** `NotificationChannel.kt` entity and
+   `NotificationChannelDao.kt` exist but `NotificationChannel::class` is not in
+   `LithiumDatabase.kt`'s entities list. The table does not exist in the running database.
+   Channel display names are not being cached. Fix: add the entity + migration.
 
-**Options:**
-- `qwen3-0.6b-q4_k_m.onnx` — ~400MB, recommended for most phones
-- `qwen2.5-0.5b-q4_k_m.onnx` — ~300MB, lighter alternative
+2. **Chat tab not wired into navigation.** `ChatScreen.kt`, `ChatViewModel.kt`, `BriefingService.kt`,
+   and `RuleExtractor.kt` all exist. Step 7 of `PLAN_CHAT_TAB_RESTRUCTURE.md` (add `Screen.Chat`
+   to `MainActivity.kt`) has not been done.
 
-Downloaded from a static file host (no API, no auth, no tracking). Verified via SHA-256 checksum before use. Stored in app-private internal storage, not accessible to other apps, not backed up.
+3. **`ChannelPair` Challenge variant missing.** The Training UI only has `NotificationPair`
+   and `AppBattle`. The channel-level training UI (Scope 3 of `PLAN_CHANNEL_TRAINING.md`)
+   has not been built.
+
+4. **Implicit signal `screenWasOn` hardcoded to `true`.** All `implicit_judgments` rows are
+   written with `screen_was_on = 1`. `ScoringRefit`'s screen-off exclusion filter has no
+   effect. `PowerManager.isInteractive` integration is missing.
+
+5. **API server has no authentication.** Any device on the Tailscale network can read and
+   write to the API. Phase 2 of the API plan adds a shared-secret token (`X-Lithium-Token`).
+
+6. **Eval dataset not created.** `app/src/main/assets/eval/` does not exist. The model eval
+   harness will fail to load test cases. See `MODEL_EVAL.md`.
+
+7. **`ScoringRefit` gated on explicit judgments only.** Implicit signals accumulate but
+   `ScoringRefit.refit()` only triggers when 10+ new explicit `TrainingJudgment` rows exist.
+   A device with no Training tab usage will never run a refit regardless of implicit data.
 
 ---
 
-## Build & Run
+## Security
 
-```bash
-git clone https://github.com/talkingrock/lithium-android.git
-cd lithium-android
-
-# Build
-./gradlew :app:assembleDebug
-
-# Install
-./gradlew :app:installDebug
-
-# Build without diagnostics module
-./gradlew :app:assembleRelease -PexcludeDiagnostics=true
-```
-
-**Requirements:**
-- Android Studio Hedgehog+ or JDK 17+
-- Android SDK 34+
-- Physical device for testing (notification listener doesn't work reliably in emulators)
+| Threat | Mitigation |
+|--------|------------|
+| Data at rest | SQLCipher AES-256. Key in Android Keystore. |
+| Other apps reading data | App-private storage. No exported content providers. |
+| Network exfiltration | API server binds to 0.0.0.0:8400; rely on Tailscale ACLs. No auth yet. |
+| Backup leaking data | `android:allowBackup="false"`, full backup excluded via `data_extraction_rules.xml` |
+| Screen capture | `FLAG_SECURE` on all windows |
+| Debug leaks | ProGuard/R8 in release. No notification content in release logs. |
 
 ---
 
 ## Accessibility Classification
 
-This app qualifies as a cognitive accessibility tool under Google Play policy. Google's policy explicitly states tools for "cognitive impairments or multiple disabilities" qualify for `isAccessibilityTool="true"`.
+This app qualifies as a cognitive accessibility tool under Google Play policy. Target
+users: adults with ADHD, autism spectrum conditions, and executive function challenges.
 
-**Target users:** Adults with ADHD, autism spectrum conditions, and executive function challenges.
-
-**Challenge addressed:** Notification overload creates sensory overwhelm and attentional disruption that disproportionately impacts neurodivergent users. The default Android notification system does not differentiate between a DM from a friend and algorithmic engagement bait.
-
-**Phase 2:** AccessibilityService for deeper interaction tracking, submitted with video demonstration for Google Play review.
-
----
-
-## MVP Milestones
-
-**M1: Observe** — NotificationListenerService logging to encrypted DB. Basic notification log UI. Permission setup flow.
-
-**M2: Correlate** — UsageStatsManager integration. Session tracking. Contacts resolver.
-
-**M3: Classify** — ONNX Runtime integrated. AI classification on WorkManager schedule. Classifications in DB.
-
-**M4: Report** — AI daily reports. Briefing screen.
-
-**M5: Suggest & Act** — AI rule suggestions. Chat review interface. Rule engine suppresses/queues in real time.
-
-**M6: Polish** — Queue review screen. Rules management. Data retention/purge. Settings. Diagnostics opt-in.
-
----
-
-## License
-
-Open source. License TBD (likely Apache 2.0 or GPLv3).
+Challenge addressed: notification overload creates sensory overwhelm and attentional
+disruption that disproportionately impacts neurodivergent users.
 
 ---
 

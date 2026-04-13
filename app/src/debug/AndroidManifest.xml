@@ -13,5 +13,13 @@
         <activity
             android:name="ai.talkingrock.lithium.HiltTestActivity"
             android:exported="false" />
+        <receiver
+            android:name="ai.talkingrock.lithium.debug.ScoringDevReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="ai.talkingrock.lithium.RUN_REFIT" />
+                <action android:name="ai.talkingrock.lithium.DUMP_IMPLICIT" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

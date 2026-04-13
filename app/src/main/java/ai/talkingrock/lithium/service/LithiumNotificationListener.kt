@@ -5,15 +5,21 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.ComponentName
 import android.content.Intent
+import android.content.Context
+import android.os.PowerManager
 import android.service.notification.NotificationListenerService
+import android.service.notification.NotificationListenerService.Ranking
+import android.service.notification.NotificationListenerService.RankingMap
 import android.service.notification.StatusBarNotification
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.room.withTransaction
 import ai.talkingrock.lithium.MainActivity
+import ai.talkingrock.lithium.data.db.ImplicitJudgmentDao
 import ai.talkingrock.lithium.data.db.LithiumDatabase
 import ai.talkingrock.lithium.data.db.QueueDao
 import ai.talkingrock.lithium.data.db.ShadeModeSeeder
+import ai.talkingrock.lithium.data.model.ImplicitJudgment
 import ai.talkingrock.lithium.data.model.NotificationRecord
 import ai.talkingrock.lithium.data.model.QueuedNotification
 import ai.talkingrock.lithium.data.repository.NotificationRepository
@@ -70,6 +76,7 @@ class LithiumNotificationListener : NotificationListenerService() {
     @Inject lateinit var queueDao: QueueDao
     @Inject lateinit var notificationResurface: NotificationResurface
     @Inject lateinit var database: LithiumDatabase
+    @Inject lateinit var implicitDao: ImplicitJudgmentDao
 
     private lateinit var serviceScope: CoroutineScope
 
@@ -81,6 +88,11 @@ class LithiumNotificationListener : NotificationListenerService() {
     // Keyed by the SBN key (package:id:tag) which is stable within a process lifetime.
     // ConcurrentHashMap: written from IO coroutine, read from main thread in onNotificationRemoved.
     private val keyToRowId = ConcurrentHashMap<String, Long>()
+
+    // Last-known rank per sbn.key, captured in onNotificationPosted via the listener's
+    // currentRanking. Needed because the RankingMap passed to onNotificationRemoved is
+    // already post-removal and does not contain the removed entry.
+    private val keyToRank = ConcurrentHashMap<String, Int>()
 
     override fun onCreate() {
         super.onCreate()
@@ -125,6 +137,16 @@ class LithiumNotificationListener : NotificationListenerService() {
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
+        // Snapshot rank synchronously on the main thread before any branching — needed
+        // for implicit-signal capture in onNotificationRemoved (post-removal RankingMap
+        // doesn't contain the removed key).
+        try {
+            val r = Ranking()
+            if (currentRanking?.getRanking(sbn.key, r) == true) {
+                keyToRank[sbn.key] = r.rank
+            }
+        } catch (_: Throwable) { /* best-effort */ }
+
         // --- Safety allowlist: checked FIRST, before shade-mode gate or rule evaluation ---
         if (SafetyAllowlist.isSafetyExempt(sbn)) {
             // Lithium's own notifications (persistent indicator, reconnect nudge, readiness
@@ -233,11 +255,32 @@ class LithiumNotificationListener : NotificationListenerService() {
     override fun onNotificationRemoved(sbn: StatusBarNotification, rankingMap: RankingMap, reason: Int) {
         val removedAtMs = System.currentTimeMillis()
         val reasonString = removalReasonString(reason)
-        val rowId = keyToRowId.remove(sbn.key) ?: return
+        val rowId = keyToRowId.remove(sbn.key)
         val packageName = sbn.packageName
 
-        serviceScope.launch {
-            notificationRepo.updateRemoval(rowId, removedAtMs, reasonString)
+        // Synchronous snapshot of peers BEFORE anything async — the system reconciles fast.
+        val screenOn = try {
+            (getSystemService(Context.POWER_SERVICE) as? PowerManager)?.isInteractive == true
+        } catch (_: Throwable) { false }
+        // The RankingMap passed here is post-removal — it doesn't contain the removed
+        // entry. Use the rank we cached at post time. Falls back to the param's lookup
+        // (which will be MAX_VALUE) if cache miss (service restarted after the post).
+        val removedRank = keyToRank.remove(sbn.key) ?: rankingMap.rankOrMax(sbn.key)
+        val implicitSnapshot: List<PeerSnapshot>? = if (screenOn &&
+            (reason == REASON_CLICK || reason == REASON_CANCEL)) {
+            snapshotPeers(sbn, rankingMap)
+        } else null
+
+        if (rowId != null) {
+            serviceScope.launch {
+                notificationRepo.updateRemoval(rowId, removedAtMs, reasonString)
+            }
+        }
+
+        if (implicitSnapshot != null) {
+            serviceScope.launch {
+                captureImplicit(sbn, reason, removedRank, implicitSnapshot, removedAtMs)
+            }
         }
 
         // When the user taps a notification, measure the resulting app session.
@@ -252,6 +295,113 @@ class LithiumNotificationListener : NotificationListenerService() {
                 }
             }
         }
+    }
+
+    private data class PeerSnapshot(
+        val packageName: String,
+        val channelId: String,
+        val rank: Int,
+    )
+
+    private fun RankingMap.rankOrMax(key: String): Int {
+        val r = Ranking()
+        return if (getRanking(key, r)) r.rank else Int.MAX_VALUE
+    }
+
+    private fun snapshotPeers(removed: StatusBarNotification, rankingMap: RankingMap): List<PeerSnapshot> {
+        val active = try { activeNotifications } catch (_: Throwable) { return emptyList() }
+            ?: return emptyList()
+        val selfPkg = packageName
+        return active.asSequence()
+            .filter { it.key != removed.key }
+            .filter { it.packageName != selfPkg }
+            .filter { !it.isOngoing }
+            .filter { (it.notification.flags and Notification.FLAG_FOREGROUND_SERVICE) == 0 }
+            .map { PeerSnapshot(
+                packageName = it.packageName,
+                channelId = it.notification.channelId ?: "",
+                rank = rankingMap.rankOrMax(it.key),
+            ) }
+            .sortedBy { it.rank }
+            .take(IMPLICIT_COHORT_CAP)
+            .toList()
+    }
+
+    private suspend fun captureImplicit(
+        removed: StatusBarNotification,
+        reason: Int,
+        removedRank: Int,
+        peers: List<PeerSnapshot>,
+        nowMs: Long,
+    ) {
+        if (peers.isEmpty()) return
+        val removedPkg = removed.packageName
+        val removedChannel = removed.notification.channelId ?: ""
+        val cohortSize = peers.size + 1
+
+        // Cascade filter for taps: only peers ranked ABOVE the tapped notification
+        // (rank < removedRank) were demonstrably examined. Dismissals keep all peers.
+        val filtered = when (reason) {
+            REASON_CLICK -> peers.filter { it.rank < removedRank }
+            REASON_CANCEL -> peers
+            else -> return
+        }
+        if (filtered.isEmpty()) {
+            Log.d(IMPLICIT_TAG, "skip: no peers pass filter (reason=$reason, removedRank=$removedRank, peers=${peers.size})")
+            return
+        }
+
+        // Drop same-(pkg, channel) peers — they carry no preference signal for ratings
+        // and feed only the category-weight fit, where same content ⇒ zero feature vector.
+        val crossChannel = filtered.filter {
+            it.packageName != removedPkg || it.channelId != removedChannel
+        }
+        if (crossChannel.isEmpty()) {
+            Log.d(IMPLICIT_TAG, "skip: all peers same (pkg, channel) as removed")
+            return
+        }
+        val rows = crossChannel.map { peer ->
+            when (reason) {
+                REASON_CLICK -> ImplicitJudgment(
+                    kind = KIND_TAP_OVER_PEER,
+                    winnerNotificationId = -1L,
+                    loserNotificationId = -1L,
+                    winnerPackage = removedPkg,
+                    winnerChannelId = removedChannel,
+                    loserPackage = peer.packageName,
+                    loserChannelId = peer.channelId,
+                    winnerRank = removedRank,
+                    loserRank = peer.rank,
+                    winnerAiClass = null,
+                    winnerAiConf = null,
+                    loserAiClass = null,
+                    loserAiConf = null,
+                    cohortSize = cohortSize,
+                    screenWasOn = true,
+                    createdAtMs = nowMs,
+                )
+                else -> ImplicitJudgment(  // REASON_CANCEL
+                    kind = KIND_PEER_OVER_DISMISSED,
+                    winnerNotificationId = -1L,
+                    loserNotificationId = -1L,
+                    winnerPackage = peer.packageName,
+                    winnerChannelId = peer.channelId,
+                    loserPackage = removedPkg,
+                    loserChannelId = removedChannel,
+                    winnerRank = peer.rank,
+                    loserRank = removedRank,
+                    winnerAiClass = null,
+                    winnerAiConf = null,
+                    loserAiClass = null,
+                    loserAiConf = null,
+                    cohortSize = cohortSize,
+                    screenWasOn = true,
+                    createdAtMs = nowMs,
+                )
+            }
+        }
+        implicitDao.insertAll(rows)
+        Log.d(IMPLICIT_TAG, "wrote ${rows.size} rows reason=$reason cohortSize=$cohortSize removedRank=$removedRank")
     }
 
     // -----------------------------------------------------------------------------------
@@ -422,5 +572,9 @@ class LithiumNotificationListener : NotificationListenerService() {
 
         /** Delay before querying usage events after a notification tap, to allow app launch. */
         private const val TAP_SESSION_DELAY_MS = 5_000L
+        private const val IMPLICIT_TAG = "ImplicitSignal"
+        private const val IMPLICIT_COHORT_CAP = 20
+        private const val KIND_TAP_OVER_PEER = "TAP_OVER_PEER"
+        private const val KIND_PEER_OVER_DISMISSED = "PEER_OVER_DISMISSED"
     }
 }

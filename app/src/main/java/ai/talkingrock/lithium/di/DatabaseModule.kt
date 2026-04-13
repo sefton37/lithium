@@ -23,6 +23,9 @@ import ai.talkingrock.lithium.data.db.AppBehaviorProfileDao
 import ai.talkingrock.lithium.data.db.QueueDao
 import ai.talkingrock.lithium.data.db.AppBattleJudgmentDao
 import ai.talkingrock.lithium.data.db.AppRankingDao
+import ai.talkingrock.lithium.data.db.ChannelRankingDao
+import ai.talkingrock.lithium.data.db.ImplicitJudgmentDao
+import ai.talkingrock.lithium.data.db.ScoreQuantilesDao
 import ai.talkingrock.lithium.data.db.TrainingJudgmentDao
 import java.security.KeyStore
 import javax.crypto.Cipher
@@ -245,6 +248,67 @@ object DatabaseModule {
             db.execSQL("ALTER TABLE notifications ADD COLUMN disposition TEXT")
         }
     }
+
+    /** Migration 9 to 10: adds channel_rankings table. */
+    val MIGRATION_9_10 = object : Migration(9, 10) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS channel_rankings (" +
+                "package_name TEXT NOT NULL," +
+                "channel_id TEXT NOT NULL," +
+                "elo_score INTEGER NOT NULL DEFAULT 1200," +
+                "wins INTEGER NOT NULL DEFAULT 0," +
+                "losses INTEGER NOT NULL DEFAULT 0," +
+                "ties INTEGER NOT NULL DEFAULT 0," +
+                "judgments INTEGER NOT NULL DEFAULT 0," +
+                "updated_at_ms INTEGER NOT NULL," +
+                "PRIMARY KEY(package_name, channel_id))"
+            )
+        }
+    }
+
+    /** Migration 10 to 11: adds implicit_judgments table. */
+    val MIGRATION_10_11 = object : Migration(10, 11) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS implicit_judgments (" +
+                "id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL," +
+                "kind TEXT NOT NULL," +
+                "winner_notification_id INTEGER NOT NULL," +
+                "loser_notification_id INTEGER NOT NULL," +
+                "winner_package TEXT NOT NULL," +
+                "winner_channel_id TEXT NOT NULL," +
+                "loser_package TEXT NOT NULL," +
+                "loser_channel_id TEXT NOT NULL," +
+                "winner_rank INTEGER NOT NULL," +
+                "loser_rank INTEGER NOT NULL," +
+                "winner_ai_class TEXT," +
+                "winner_ai_conf REAL," +
+                "loser_ai_class TEXT," +
+                "loser_ai_conf REAL," +
+                "cohort_size INTEGER NOT NULL," +
+                "screen_was_on INTEGER NOT NULL DEFAULT 1," +
+                "created_at_ms INTEGER NOT NULL)"
+            )
+        }
+    }
+
+    /** Migration 11 to 12: adds score_quantiles singleton table. */
+    val MIGRATION_11_12 = object : Migration(11, 12) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS score_quantiles (" +
+                "id INTEGER PRIMARY KEY NOT NULL DEFAULT 0," +
+                "window_days INTEGER NOT NULL," +
+                "q20 REAL NOT NULL," +
+                "q60 REAL NOT NULL," +
+                "q90 REAL NOT NULL," +
+                "computed_at_ms INTEGER NOT NULL," +
+                "sample_size INTEGER NOT NULL)"
+            )
+        }
+    }
+
     /**
      * Fixed 32-byte plaintext that the Keystore key encrypts to produce the passphrase.
      * This is NOT a secret — the security comes from the Keystore key, not this value.
@@ -334,7 +398,7 @@ object DatabaseModule {
             .addMigrations(
                 MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4,
                 MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8,
-                MIGRATION_8_9
+                MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12
             )
             // No fallback destructive migration — force explicit migrations.
             // If a migration is missing, the app crashes loudly rather than
@@ -374,4 +438,16 @@ object DatabaseModule {
     @Provides
     fun provideAppBattleJudgmentDao(db: LithiumDatabase): AppBattleJudgmentDao =
         db.appBattleJudgmentDao()
+
+    @Provides
+    fun provideChannelRankingDao(db: LithiumDatabase): ChannelRankingDao =
+        db.channelRankingDao()
+
+    @Provides
+    fun provideImplicitJudgmentDao(db: LithiumDatabase): ImplicitJudgmentDao =
+        db.implicitJudgmentDao()
+
+    @Provides
+    fun provideScoreQuantilesDao(db: LithiumDatabase): ScoreQuantilesDao =
+        db.scoreQuantilesDao()
 }

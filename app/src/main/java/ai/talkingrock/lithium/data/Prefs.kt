@@ -60,4 +60,38 @@ object Prefs {
     /** Boolean: require device idle (Doze). Default false (relaxed from original). */
     const val PREF_REQUIRE_IDLE = "worker_require_idle"
     const val DEFAULT_REQUIRE_IDLE = false
+
+    // -- Scoring Refit --
+
+    /**
+     * Int: count of training_judgments at the time of the last successful refit.
+     * Used for the debounce check — refit is skipped unless at least
+     * [REFIT_MIN_NEW_JUDGMENTS] new explicit judgments have been added since.
+     */
+    const val REFIT_LAST_JUDGMENT_COUNT = "refit_last_judgment_count"
+
+    /**
+     * Int: count of implicit_judgments at the time of the last successful refit.
+     * Stored for diagnostic logging only — does NOT gate the debounce check.
+     */
+    const val REFIT_LAST_IMPLICIT_COUNT = "refit_last_implicit_count"
+
+    /**
+     * Minimum new explicit training judgments required before a refit runs.
+     * Prevents thrashing when no new deliberate training has occurred.
+     */
+    const val REFIT_MIN_NEW_JUDGMENTS = 10
+
+    /**
+     * String: comma-separated category weight floats learned by the logistic
+     * regression in [ai.talkingrock.lithium.ai.scoring.ScoringRefit].
+     * Read by Scorer.categoryBias() at inference time.
+     */
+    const val CATEGORY_WEIGHTS = "scoring_category_weights"
+
+    /**
+     * Float: rank_delta coefficient learned as a nuisance parameter during refit.
+     * NOT applied at inference time — stored here for diagnostic logging only.
+     */
+    const val RANK_DELTA_WEIGHT = "scoring_rank_delta_weight"
 }

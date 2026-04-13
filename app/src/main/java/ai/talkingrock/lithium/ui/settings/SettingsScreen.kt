@@ -426,6 +426,32 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.secondary,
                     )
                 }
+                Spacer(Modifier.height(4.dp))
+                TextButton(
+                    onClick = viewModel::devRunScoringRefit,
+                    modifier = Modifier
+                        .defaultMinSize(minHeight = 48.dp)
+                        .semantics { contentDescription = "Run scoring refit now" },
+                ) {
+                    Text(
+                        text = "Run Scoring Refit Now (debug)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.secondary,
+                    )
+                }
+                Spacer(Modifier.height(4.dp))
+                TextButton(
+                    onClick = viewModel::devDumpRecentImplicitJudgments,
+                    modifier = Modifier
+                        .defaultMinSize(minHeight = 48.dp)
+                        .semantics { contentDescription = "Dump recent implicit judgments" },
+                ) {
+                    Text(
+                        text = "Dump Recent Implicit Judgments (debug)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.secondary,
+                    )
+                }
             }
             Spacer(Modifier.height(4.dp))
             Text(

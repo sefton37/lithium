@@ -5,13 +5,16 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.os.Process
+import android.util.Log
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.work.WorkManager
 import ai.talkingrock.lithium.ai.WorkScheduler
+import ai.talkingrock.lithium.ai.scoring.ScoringRefit
 import ai.talkingrock.lithium.data.Prefs
 import ai.talkingrock.lithium.data.db.AppBehaviorProfileDao
+import ai.talkingrock.lithium.data.db.ImplicitJudgmentDao
 import ai.talkingrock.lithium.data.db.NotificationDao
 import ai.talkingrock.lithium.data.db.QueueDao
 import ai.talkingrock.lithium.data.db.ReportDao
@@ -32,6 +35,9 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import javax.inject.Inject
 
 /**
@@ -95,11 +101,16 @@ class SettingsViewModel @Inject constructor(
     private val behaviorProfileDao: AppBehaviorProfileDao,
     private val shadeModeRepository: ShadeModeRepository,
     private val shadeModeSeeder: ShadeModeSeeder,
+    private val scoringRefit: ScoringRefit,
+    private val implicitJudgmentDao: ImplicitJudgmentDao,
 ) : ViewModel() {
 
     companion object {
         private const val APP_VERSION = "0.1.0"
         private const val TAG = "SettingsViewModel"
+        private const val TAG_DEV_REFIT = "DevRefit"
+        private const val TAG_DEV_IMPLICIT = "DevImplicit"
+        private const val DEV_IMPLICIT_LIMIT = 20
     }
 
     private val _uiState = MutableStateFlow(
@@ -316,6 +327,69 @@ class SettingsViewModel @Inject constructor(
             notificationDao.count()
         } catch (e: Exception) {
             0
+        }
+    }
+
+    // -----------------------------------------------------------------------------------------
+    // Dev / diagnostics actions (debug builds only)
+    // -----------------------------------------------------------------------------------------
+
+    /**
+     * Triggers a full scoring refit immediately, bypassing the debounce threshold.
+     * Logs outcome via [TAG_DEV_REFIT] so it shows up in `adb logcat -s DevRefit`.
+     *
+     * Because the debounce check inside [ScoringRefit.refit] compares the current
+     * training_judgment count against the last-saved count, we temporarily zero out the
+     * saved count so the refit always runs when invoked from dev tools.
+     */
+    fun devRunScoringRefit() {
+        viewModelScope.launch {
+            Log.i(TAG_DEV_REFIT, "devRunScoringRefit: invoked from dev menu — forcing refit")
+            try {
+                // Override debounce: zero out the saved count so delta always >= threshold.
+                sharedPreferences.edit()
+                    .putInt(Prefs.REFIT_LAST_JUDGMENT_COUNT, 0)
+                    .apply()
+                scoringRefit.refit()
+                val implicitCount = try { implicitJudgmentDao.count() } catch (_: Exception) { -1 }
+                Log.i(TAG_DEV_REFIT, "devRunScoringRefit: refit completed — implicit count=$implicitCount")
+                snackbarMessages.emit("Scoring refit complete — see logcat DevRefit")
+            } catch (e: Exception) {
+                Log.e(TAG_DEV_REFIT, "devRunScoringRefit: refit failed", e)
+                snackbarMessages.emit("Scoring refit failed: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Loads the [DEV_IMPLICIT_LIMIT] most-recent implicit judgment rows and logs each
+     * one via [TAG_DEV_IMPLICIT]. Also logs the total row count as a header.
+     *
+     * Each log line format:
+     * `ts=<ISO> kind=<K> winner=<pkg>/<ch>[rank=<R>] loser=<pkg>/<ch>[rank=<R>] cohort=<N> screen=<B>`
+     */
+    fun devDumpRecentImplicitJudgments() {
+        viewModelScope.launch {
+            try {
+                val total = implicitJudgmentDao.count()
+                val recent = implicitJudgmentDao.getRecent(DEV_IMPLICIT_LIMIT)
+                Log.i(TAG_DEV_IMPLICIT, "devDump: total implicit_judgments=$total, showing last ${recent.size}")
+                val fmt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS", Locale.US)
+                for (j in recent) {
+                    val ts = fmt.format(Date(j.createdAtMs))
+                    Log.i(
+                        TAG_DEV_IMPLICIT,
+                        "ts=$ts kind=${j.kind} " +
+                            "winner=${j.winnerPackage}/${j.winnerChannelId}[rank=${j.winnerRank}] " +
+                            "loser=${j.loserPackage}/${j.loserChannelId}[rank=${j.loserRank}] " +
+                            "cohort=${j.cohortSize} screen=${j.screenWasOn}"
+                    )
+                }
+                snackbarMessages.emit("Dumped ${recent.size} implicit judgments (total=$total) — see logcat DevImplicit")
+            } catch (e: Exception) {
+                Log.e(TAG_DEV_IMPLICIT, "devDump: failed", e)
+                snackbarMessages.emit("Implicit dump failed: ${e.message}")
+            }
         }
     }
 }

@@ -1,7 +1,7 @@
 # Testing Strategy: Lithium Android
 
 **Version:** April 2026  
-**DB version:** 8  
+**DB version:** 12 (was 8 when this document was written; update tests accordingly)
 **Scope:** All 13 subsystems, full lifecycle from notification ingestion through training feedback
 
 ---
@@ -21,15 +21,33 @@
 
 ### Gaps (what this plan fills)
 
-- **Zero Room/DB tests** — no migration tests, no DAO query tests, no in-memory DB integration
-- **No worker tests** — TierBackfillWorker and AiAnalysisWorker untested in test harness
-- **No ViewModel tests** — TrainingViewModel, BriefingViewModel, SetupViewModel, QueueViewModel untested
-- **No RuleEngine tests** — the hot path is entirely uncovered
-- **No Elo/TrainerLevel tests** — pure-Kotlin but not tested
-- **No Ktor API tests** — endpoint contract unverified
-- **No migration regression tests** — 8 migrations, no forward-path test with representative data
-- **Maestro flows 05/07/08 are shallow** — 07 waits for "Your Briefing" but doesn't verify tier breakdown or suggestion count; 08 is a no-op stub
-- **Training → classification feedback is stubbed** — NotFromContact rule condition always returns false (noted in RuleEngine.kt line 99), no contract test exists to prevent silent regression
+Note: some gaps below were already addressed after this document was written. Verified
+status is noted per item.
+
+- **Zero Room/DB tests** — PARTIALLY ADDRESSED: `NotificationDaoTest`, `TrainingJudgmentDaoTest`,
+  `AppRankingDaoTest`, `MigrationTest` now exist in `androidTest/`. DAO query tests for
+  `ImplicitJudgmentDao`, `ChannelRankingDao`, `ScoreQuantilesDao` are still missing.
+  Migration coverage now needed through v12 (was v8 when this was written).
+- **No worker tests** — ADDRESSED: `TierBackfillWorkerTest` and `AiAnalysisWorkerTest` exist
+  in `androidTest/`.
+- **No ViewModel tests** — PARTIALLY ADDRESSED: `BriefingViewModelTest`, `SetupViewModelTest`,
+  `QueueViewModelTest`, `RulesViewModelTest` exist in `test/`. `TrainingViewModel` tests
+  are still missing.
+- **No RuleEngine tests** — PARTIALLY ADDRESSED: `RuleEngineIntegrationTest` exists in
+  `androidTest/integration/`. The `RuleEngineTest.kt` JVM unit test described in section 2.1
+  may or may not exist — verify.
+- **No Elo/TrainerLevel tests** — ADDRESSED: `EloTest.kt` and `TrainerLevelTest.kt` exist.
+- **No Ktor API tests** — ADDRESSED: `LithiumApiServerTest.kt` exists in `test/`.
+- **No migration regression tests** — PARTIALLY ADDRESSED: `MigrationTest.kt` exists. Coverage
+  must be extended through v12. Current document was written for v8.
+- **Maestro flows 05/07/08 are shallow** — STATUS UNKNOWN; verify `.maestro/` flows.
+- **Training → classification feedback is stubbed** — `NotFromContact` rule condition stub
+  status is unverified. Check `RuleEngine.kt` current state.
+- **NEW GAP: No tests for implicit signal capture** — `captureImplicit` in
+  `LithiumNotificationListener` is untested. The pure row-generation function extraction
+  described in the Testing Strategy section for PLAN_IMPLICIT_SIGNALS.md has not been done.
+- **NEW GAP: No tests for `Scorer`, `ScoringRefit`, `TierMapper`** — the scoring pipeline
+  added in PLAN_SCORING_MODEL.md has no test coverage.
 
 ---
 

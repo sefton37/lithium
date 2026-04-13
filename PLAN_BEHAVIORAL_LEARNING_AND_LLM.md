@@ -1,5 +1,19 @@
 # Plan: Behavioral Learning Profile + Dual LLM Backend
 
+**Status: Phase 1 implemented. Phase 2 partially implemented.**
+
+Phase 1 (`AppBehaviorProfile` entity, DAO, profile accumulation in `AiAnalysisWorker`
+Step 6, confidence adjustment in `NotificationClassifier`, suggestion calibration in
+`SuggestionGenerator`) is fully in the codebase.
+
+Phase 2 (dual LLM backend): `LlamaEngine` and `LlamaCpp` (JNI) are implemented and
+used by the Chat tab's `RuleExtractor`. ONNX Tier 1 classification is stubbed — the
+`NotificationClassifier` falls through to the heuristic path when ONNX is not loaded.
+The 3-tier cascade described in §2.2 (ONNX → llama.cpp → heuristic) is not active in
+production; the heuristic path handles all classification currently.
+
+---
+
 ## Context
 
 Lithium's AI pipeline runs every 24 hours via `AiAnalysisWorker`. It classifies

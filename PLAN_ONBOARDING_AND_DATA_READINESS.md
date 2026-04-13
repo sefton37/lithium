@@ -1,5 +1,21 @@
 # Plan: Onboarding Flow and Data Readiness Notification
 
+**Status: Implemented.**
+
+All steps landed:
+- `SetupScreen.kt` is a `HorizontalPager` with 6 pages (Welcome through LearningPeriod).
+- `Prefs.kt` exists with `ONBOARDING_COMPLETE`, `DATA_READY_NOTIFIED`, and threshold
+  constants.
+- `DataReadinessNotifier.kt` exists as a plain object, fires once when threshold crossed.
+- `AiAnalysisWorker` performs the data-readiness check after Step 2 classification.
+- `BriefingScreen` empty state distinguishes "learning" from "no new report".
+- `MainActivity` uses dynamic start destination via `NotificationManagerCompat` check
+  (the Risk 6 mitigation was applied — `ListenerState.isConnected` is not used for the
+  startup decision).
+- `POST_NOTIFICATIONS` is declared in the manifest.
+
+---
+
 ## Context
 
 Lithium currently presents a single-screen permission list as its entire first-run

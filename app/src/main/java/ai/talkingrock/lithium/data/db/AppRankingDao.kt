@@ -51,4 +51,11 @@ interface AppBattleJudgmentDao {
 
     @Query("SELECT COALESCE(SUM(xp_awarded), 0) FROM app_battle_judgments WHERE choice != 'skip'")
     fun totalXpFlow(): Flow<Int>
+
+    /**
+     * All app-battle judgments ordered chronologically.
+     * Used by ScoringRefit for full Elo replay from scratch.
+     */
+    @Query("SELECT * FROM app_battle_judgments ORDER BY created_at_ms ASC")
+    suspend fun getAll(): List<AppBattleJudgment>
 }
