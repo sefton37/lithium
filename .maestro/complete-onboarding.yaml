@@ -1,19 +1,20 @@
-# Helper flow: Walk the 9-page onboarding pager (indexes 0-8) to set
+# Helper flow: Walk the 10-page onboarding pager (indexes 0-9) to set
 # ONBOARDING_COMPLETE=true so subsequent flows launch directly into Briefing.
 #
 # Prerequisites: Permissions already granted by run-tests.sh Phase 2.
 #
-# Pager layout (from SetupScreen.kt:184-254):
-#   0. Title            → Next
-#   1. Welcome          → Next
-#   2. Privacy          → Next
-#   3. Notification Access → Next (enabled once listener is allowed)
-#   4. Battery Optimization → "Next" if exempt, else "Skip"
-#   5. Shade Ownership  → Next
-#   6. Usage Access     → "Next" if granted, else "Skip"
-#   7. Contacts         → "Next" if granted, else "Skip"
-#   8. Learning Period  → Get Started
-# → 8 page-advance taps + 1 Get Started tap.
+# Pager layout (from SetupScreen.kt):
+#   0. Title              → Next
+#   1. Welcome            → Next
+#   2. How It Works       → Next
+#   3. Privacy            → Next
+#   4. Notification Access → Next (enabled once listener is allowed)
+#   5. Battery Optimization → "Next" if exempt, else "Skip"
+#   6. Shade Ownership    → Next
+#   7. Usage Access       → "Next" if granted, else "Skip"
+#   8. Contacts           → "Next" if granted, else "Skip"
+#   9. Learning Period    → Get Started
+# → 9 page-advance taps + 1 Get Started tap.
 appId: ai.talkingrock.lithium.debug
 ---
 - stopApp
@@ -52,7 +53,7 @@ appId: ai.talkingrock.lithium.debug
       - tapOn:
           text: "^(Next|Skip)$"
       - waitForAnimationToEnd
-      # Page 2: Privacy
+      # Page 2: How It Works
       - extendedWaitUntil:
           visible:
             text: "^(Next|Skip)$"
@@ -60,7 +61,7 @@ appId: ai.talkingrock.lithium.debug
       - tapOn:
           text: "^(Next|Skip)$"
       - waitForAnimationToEnd
-      # Page 3: Notification Access
+      # Page 3: Privacy
       - extendedWaitUntil:
           visible:
             text: "^(Next|Skip)$"
@@ -68,7 +69,7 @@ appId: ai.talkingrock.lithium.debug
       - tapOn:
           text: "^(Next|Skip)$"
       - waitForAnimationToEnd
-      # Page 4: Battery Optimization
+      # Page 4: Notification Access
       - extendedWaitUntil:
           visible:
             text: "^(Next|Skip)$"
@@ -76,7 +77,7 @@ appId: ai.talkingrock.lithium.debug
       - tapOn:
           text: "^(Next|Skip)$"
       - waitForAnimationToEnd
-      # Page 5: Shade Ownership
+      # Page 5: Battery Optimization
       - extendedWaitUntil:
           visible:
             text: "^(Next|Skip)$"
@@ -84,7 +85,7 @@ appId: ai.talkingrock.lithium.debug
       - tapOn:
           text: "^(Next|Skip)$"
       - waitForAnimationToEnd
-      # Page 6: Usage Access
+      # Page 6: Shade Ownership
       - extendedWaitUntil:
           visible:
             text: "^(Next|Skip)$"
@@ -92,7 +93,7 @@ appId: ai.talkingrock.lithium.debug
       - tapOn:
           text: "^(Next|Skip)$"
       - waitForAnimationToEnd
-      # Page 7: Contacts
+      # Page 7: Usage Access
       - extendedWaitUntil:
           visible:
             text: "^(Next|Skip)$"
@@ -100,7 +101,15 @@ appId: ai.talkingrock.lithium.debug
       - tapOn:
           text: "^(Next|Skip)$"
       - waitForAnimationToEnd
-      # Page 8: Learning Period — "Get Started" commits ONBOARDING_COMPLETE=true
+      # Page 8: Contacts
+      - extendedWaitUntil:
+          visible:
+            text: "^(Next|Skip)$"
+          timeout: 5000
+      - tapOn:
+          text: "^(Next|Skip)$"
+      - waitForAnimationToEnd
+      # Page 9: Learning Period — "Get Started" commits ONBOARDING_COMPLETE=true
       - extendedWaitUntil:
           visible:
             text: "Get Started"

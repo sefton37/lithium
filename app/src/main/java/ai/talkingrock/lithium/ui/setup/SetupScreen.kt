@@ -56,16 +56,17 @@ import kotlinx.coroutines.launch
  * Pages:
  * 0 — Title: branded "LITHIUM" screen (matches Helm's title style)
  * 1 — Welcome: what Lithium does
- * 2 — Privacy Promise: data never leaves device
- * 3 — Notification Access permission
- * 4 — Battery Optimization exemption (skippable)
- * 4b (5) — Shade Ownership explanation (informational)
- * 6 — Usage Access permission (skippable)
- * 7 — Contacts permission (optional, skippable)
- * 8 — Learning Period explanation + "Get Started"
+ * 2 — How It Works: apps-as-outlets / channels / training mental model
+ * 3 — Privacy Promise: data never leaves device
+ * 4 — Notification Access permission
+ * 5 — Battery Optimization exemption (skippable)
+ * 6 — Shade Ownership explanation (informational)
+ * 7 — Usage Access permission (skippable)
+ * 8 — Contacts permission (optional, skippable)
+ * 9 — Learning Period explanation + "Get Started"
  *
  * If [SetupViewModel.onboardingComplete] is true (returning user whose notification
- * access was revoked), the pager starts at the Notification Access page (index 3).
+ * access was revoked), the pager starts at the Notification Access page (index 4).
  */
 @Composable
 fun SetupScreen(
@@ -89,8 +90,8 @@ fun SetupScreen(
     }
 
     // Returning users who lost permission skip the intro pages
-    val initialPage = if (viewModel.onboardingComplete) 3 else 0
-    val pageCount = 9
+    val initialPage = if (viewModel.onboardingComplete) 4 else 0
+    val pageCount = 10
     val pagerState = rememberPagerState(initialPage = initialPage) { pageCount }
 
     val contactsLauncher = rememberLauncherForActivityResult(
@@ -111,8 +112,9 @@ fun SetupScreen(
             when (page) {
                 0 -> TitlePage()
                 1 -> WelcomePage()
-                2 -> PrivacyPage()
-                3 -> NotificationAccessPage(
+                2 -> HowItWorksPage()
+                3 -> PrivacyPage()
+                4 -> NotificationAccessPage(
                     granted = uiState.notificationAccessGranted,
                     onGrant = {
                         context.startActivity(
@@ -120,7 +122,7 @@ fun SetupScreen(
                         )
                     }
                 )
-                4 -> BatteryOptimizationPage(
+                5 -> BatteryOptimizationPage(
                     exempt = uiState.batteryOptimizationExempt,
                     onRequest = {
                         val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
@@ -129,8 +131,8 @@ fun SetupScreen(
                         context.startActivity(intent)
                     }
                 )
-                5 -> ShadeOwnershipPage()
-                6 -> UsageAccessPage(
+                6 -> ShadeOwnershipPage()
+                7 -> UsageAccessPage(
                     granted = uiState.usageAccessGranted,
                     onGrant = {
                         val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).apply {
@@ -139,13 +141,13 @@ fun SetupScreen(
                         context.startActivity(intent)
                     }
                 )
-                7 -> ContactsPage(
+                8 -> ContactsPage(
                     granted = uiState.contactsGranted,
                     onGrant = {
                         contactsLauncher.launch(android.Manifest.permission.READ_CONTACTS)
                     }
                 )
-                8 -> LearningPeriodPage()
+                9 -> LearningPeriodPage()
             }
         }
 
@@ -171,7 +173,7 @@ fun SetupScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Back button (hidden on first two pages and last page)
-            if (pagerState.currentPage > 1 && pagerState.currentPage < pageCount - 1) {  // pageCount is now 9
+            if (pagerState.currentPage > 1 && pagerState.currentPage < pageCount - 1) {  // pageCount is now 10
                 TextButton(
                     onClick = { scope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) } }
                 ) {
@@ -191,8 +193,8 @@ fun SetupScreen(
                         Text("Next")
                     }
                 }
-                // Welcome and Privacy pages — simple "Next"
-                1, 2 -> {
+                // Welcome, How It Works, Privacy — simple "Next"
+                1, 2, 3 -> {
                     Button(
                         onClick = { scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) } },
                         modifier = Modifier.defaultMinSize(minHeight = 48.dp)
@@ -201,9 +203,9 @@ fun SetupScreen(
                     }
                 }
                 // Notification Access — must be granted to proceed
-                3 -> {
+                4 -> {
                     Button(
-                        onClick = { scope.launch { pagerState.animateScrollToPage(4) } },
+                        onClick = { scope.launch { pagerState.animateScrollToPage(5) } },
                         enabled = uiState.notificationAccessGranted,
                         modifier = Modifier.defaultMinSize(minHeight = 48.dp)
                     ) {
@@ -211,43 +213,43 @@ fun SetupScreen(
                     }
                 }
                 // Battery Optimization — skippable
-                4 -> {
+                5 -> {
                     Button(
-                        onClick = { scope.launch { pagerState.animateScrollToPage(5) } },
+                        onClick = { scope.launch { pagerState.animateScrollToPage(6) } },
                         modifier = Modifier.defaultMinSize(minHeight = 48.dp)
                     ) {
                         Text(if (uiState.batteryOptimizationExempt) "Next" else "Skip")
                     }
                 }
                 // Shade Ownership — informational only, always Next
-                5 -> {
+                6 -> {
                     Button(
-                        onClick = { scope.launch { pagerState.animateScrollToPage(6) } },
+                        onClick = { scope.launch { pagerState.animateScrollToPage(7) } },
                         modifier = Modifier.defaultMinSize(minHeight = 48.dp)
                     ) {
                         Text("Next")
                     }
                 }
                 // Usage Access — can proceed even if not granted
-                6 -> {
+                7 -> {
                     Button(
-                        onClick = { scope.launch { pagerState.animateScrollToPage(7) } },
+                        onClick = { scope.launch { pagerState.animateScrollToPage(8) } },
                         modifier = Modifier.defaultMinSize(minHeight = 48.dp)
                     ) {
                         Text(if (uiState.usageAccessGranted) "Next" else "Skip")
                     }
                 }
                 // Contacts — optional, skip or continue
-                7 -> {
+                8 -> {
                     Button(
-                        onClick = { scope.launch { pagerState.animateScrollToPage(8) } },
+                        onClick = { scope.launch { pagerState.animateScrollToPage(9) } },
                         modifier = Modifier.defaultMinSize(minHeight = 48.dp)
                     ) {
                         Text(if (uiState.contactsGranted) "Next" else "Skip")
                     }
                 }
                 // Learning period — final page, "Get Started"
-                8 -> {
+                9 -> {
                     Button(
                         onClick = {
                             viewModel.markOnboardingComplete()
@@ -362,6 +364,27 @@ private fun WelcomePage() {
                 "It watches your notifications, learns which ones actually matter to you, " +
                 "and helps you silence the noise — so the important stuff always gets through.\n\n" +
                 "No accounts. No cloud. Just your phone, working for you."
+    )
+}
+
+@Composable
+private fun HowItWorksPage() {
+    OnboardingPage(
+        title = "How Lithium Works",
+        body = "Think of each app as a media outlet — a TV station with different " +
+                "channels. Your messaging app has a channel for direct messages and " +
+                "another for group pings. Your shopping app has a channel for order " +
+                "updates and another for promos.\n\n" +
+                "Lithium watches how you react to notifications from each channel: " +
+                "the ones you read right away, the ones you ignore, the ones you " +
+                "dismiss without looking. Over time it learns which channels deserve " +
+                "your attention and which are noise.\n\n" +
+                "This takes time — Lithium needs to see enough of your everyday life " +
+                "to learn your patterns. You can speed this up with Training: quick " +
+                "comparisons where you pick which of two notifications matters more. " +
+                "Each comparison levels up the model on your device.\n\n" +
+                "When Lithium has learned enough, it can take over your notification " +
+                "shade — surfacing only what matters and tucking the rest out of the way."
     )
 }
 
