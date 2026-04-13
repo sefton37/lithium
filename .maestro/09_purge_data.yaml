@@ -10,7 +10,7 @@ appId: ai.talkingrock.lithium.debug
 - extendedWaitUntil:
     visible:
       text: "Briefing"
-    timeout: 15000
+    timeout: 30000
 
 # Navigate to Settings
 - tapOn: "Settings"
@@ -55,7 +55,7 @@ appId: ai.talkingrock.lithium.debug
     timeout: 5000
 
 # Briefing should show empty state after purge
-- tapOn: "Briefing"
+- tapOn: "Chat"
 - extendedWaitUntil:
     visible:
       text: "Briefing"

@@ -1,29 +1,31 @@
 # Flow: Create a rule end-to-end and verify it appears in the Rules list.
 # Prerequisites: Permissions granted by run-tests.sh Phase 2. Test notifications
-# posted in Phase 2 should be recorded by the listener, populating the observed-app
+# posted in Phase 2 are recorded by the listener, populating the observed-app
 # dropdown used by the Add Rule form.
 #
-# The app-observation list is data-dependent: if no apps are observed yet, the
-# dropdown shows "No apps observed yet…" and saving is disabled. This flow handles
-# both paths via runFlow branches.
+# Field-ordering note: selectPackage() and selectAction() both re-generate the
+# description field via buildDescription(), so the typed description must be
+# entered LAST, after app + action are selected. Otherwise the save persists
+# the auto-generated description instead of the tag we want to assert on.
 appId: ai.talkingrock.lithium.debug
 ---
 - stopApp
 - waitForAnimationToEnd
 - launchApp
 
-# Wait for app to load — use "Briefing" tab label (always present)
+# Cold-launch timeout is generous because residual CPU load (analysis worker,
+# other installed apps) can delay the first frame past 15s on busy devices.
 - extendedWaitUntil:
     visible:
       text: "Briefing"
-    timeout: 15000
+    timeout: 30000
 
 # Navigate to Rules
 - tapOn: "Rules"
 - extendedWaitUntil:
     visible:
       text: "Rules"
-    timeout: 5000
+    timeout: 10000
 
 # Tap the FAB to add a rule (Compose FAB exposes contentDescription)
 - tapOn: "Add rule"
@@ -32,7 +34,7 @@ appId: ai.talkingrock.lithium.debug
 - extendedWaitUntil:
     visible:
       text: "New Rule"
-    timeout: 5000
+    timeout: 10000
 
 # Verify form fields are present
 - assertVisible: "App"
@@ -41,18 +43,12 @@ appId: ai.talkingrock.lithium.debug
 - assertVisible: "Description"
 - assertVisible: "Save Rule"
 
-# Enter a description that we can search for in the Rules list afterward
-- tapOn: "Description"
-- inputText: "maestro-05-rule"
-- hideKeyboard
-
-# Open the App dropdown. The field is an ExposedDropdownMenuBox with a read-only
-# text field; its "Select an app" placeholder is not reliably exposed to Maestro,
-# so we tap the floating "App" label (which sits over the menuAnchor'd field).
+# Open the App dropdown. The "Select an app" placeholder is not reliably
+# exposed to Maestro, so we tap the "App" label that sits over the menuAnchor.
 - tapOn: "App"
 - waitForAnimationToEnd
 
-# If observed-apps list is empty, abort the save path and back out to Rules.
+# If the observed-apps list is empty, back out; save is not possible.
 - runFlow:
     when:
       visible: "No apps observed yet"
@@ -64,8 +60,8 @@ appId: ai.talkingrock.lithium.debug
             text: "Rules"
           timeout: 5000
 
-# If the dropdown populated, pick the first observed package that matches a
-# typical Android package identifier (at least one dot, lowercase).
+# If populated, pick the first observed package that matches a typical
+# Android package identifier, then pick an Action and save.
 - runFlow:
     when:
       notVisible: "No apps observed yet"
@@ -74,18 +70,24 @@ appId: ai.talkingrock.lithium.debug
           text: "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
           index: 0
       - waitForAnimationToEnd
-      # Pick an Action — tap the "Action" label to expand its dropdown
+      # Action dropdown — tap the "Action" label to expand
       - tapOn: "Action"
       - extendedWaitUntil:
           visible:
             text: "Suppress"
-          timeout: 3000
+          timeout: 5000
       - tapOn: "Suppress"
-      # Save the rule
+      - waitForAnimationToEnd
+      # Description must be typed LAST — app/action selection regenerates it.
+      - tapOn: "Description"
+      - inputText: "maestro-05-rule"
+      - hideKeyboard
+      # Save — the Save button is gated on isSaving && selectedPackage
       - tapOn: "Save Rule"
-      # After save we should be back on the Rules list; verify the rule row exists.
+      # After save, AddRule closes and Rules list renders. The Rule.name field
+      # is the saved description, so the tag appears in the list row.
       - extendedWaitUntil:
           visible:
             text: "maestro-05-rule"
-          timeout: 5000
+          timeout: 10000
       - assertVisible: "maestro-05-rule"

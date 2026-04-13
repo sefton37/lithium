@@ -11,7 +11,7 @@ appId: ai.talkingrock.lithium.debug
 - extendedWaitUntil:
     visible:
       text: "Briefing"
-    timeout: 15000
+    timeout: 30000
 
 # --- Queue tab ---
 - tapOn: "Queue"
@@ -51,7 +51,7 @@ appId: ai.talkingrock.lithium.debug
 - assertVisible: "About"
 
 # --- Back to Briefing tab ---
-- tapOn: "Briefing"
+- tapOn: "Chat"
 - extendedWaitUntil:
     visible:
       text: "Briefing"

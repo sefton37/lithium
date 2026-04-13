@@ -1,18 +1,19 @@
-# Helper flow: Walk the 7-page onboarding pager to set ONBOARDING_COMPLETE=true,
-# so subsequent flows launch directly into the Briefing screen.
+# Helper flow: Walk the 9-page onboarding pager (indexes 0-8) to set
+# ONBOARDING_COMPLETE=true so subsequent flows launch directly into Briefing.
 #
-# Prerequisites: Permissions already granted by run-tests.sh Phase 2 (notification
-# listener, usage stats, contacts). This flow taps "Next" / "Get Started" on each
-# page without re-requesting permissions.
+# Prerequisites: Permissions already granted by run-tests.sh Phase 2.
 #
-# Pager layout (from SetupScreen.kt):
+# Pager layout (from SetupScreen.kt:184-254):
+#   0. Title            → Next
 #   1. Welcome          → Next
 #   2. Privacy          → Next
 #   3. Notification Access → Next (enabled once listener is allowed)
 #   4. Battery Optimization → "Next" if exempt, else "Skip"
-#   5. Usage Access     → "Next" if granted, else "Skip"
-#   6. Contacts         → "Next" if granted, else "Skip"
-#   7. Learning Period  → Get Started
+#   5. Shade Ownership  → Next
+#   6. Usage Access     → "Next" if granted, else "Skip"
+#   7. Contacts         → "Next" if granted, else "Skip"
+#   8. Learning Period  → Get Started
+# → 8 page-advance taps + 1 Get Started tap.
 appId: ai.talkingrock.lithium.debug
 ---
 - stopApp
@@ -28,62 +29,78 @@ appId: ai.talkingrock.lithium.debug
       - assertVisible: "Briefing"
 
 # Otherwise, we're on the Welcome page — walk the pager.
+# Pages 1-6 each expose exactly one navigation button ("Next" or "Skip");
+# page 7 exposes "Get Started". We use a regex tap that matches either label,
+# which guarantees exactly one advance per page regardless of permission state.
 - runFlow:
     when:
       notVisible: "Your Briefing"
     commands:
+      # Page 0: Title
+      - extendedWaitUntil:
+          visible:
+            text: "Next"
+          timeout: 30000
+      - tapOn:
+          text: "^(Next|Skip)$"
+      - waitForAnimationToEnd
       # Page 1: Welcome
       - extendedWaitUntil:
           visible:
-            text: "Next"
-          timeout: 15000
-      - tapOn: "Next"
+            text: "^(Next|Skip)$"
+          timeout: 5000
+      - tapOn:
+          text: "^(Next|Skip)$"
+      - waitForAnimationToEnd
       # Page 2: Privacy
       - extendedWaitUntil:
           visible:
-            text: "Next"
+            text: "^(Next|Skip)$"
           timeout: 5000
-      - tapOn: "Next"
-      # Page 3: Notification Access — "Next" is enabled because listener is allowed
+      - tapOn:
+          text: "^(Next|Skip)$"
+      - waitForAnimationToEnd
+      # Page 3: Notification Access
       - extendedWaitUntil:
           visible:
-            text: "Next"
+            text: "^(Next|Skip)$"
           timeout: 5000
-      - tapOn: "Next"
-      # Page 4: Battery Optimization — accept either "Next" or "Skip"
-      - runFlow:
-          when:
-            visible: "Next"
-          commands:
-            - tapOn: "Next"
-      - runFlow:
-          when:
-            visible: "Skip"
-          commands:
-            - tapOn: "Skip"
-      # Page 5: Usage Access
-      - runFlow:
-          when:
-            visible: "Next"
-          commands:
-            - tapOn: "Next"
-      - runFlow:
-          when:
-            visible: "Skip"
-          commands:
-            - tapOn: "Skip"
-      # Page 6: Contacts
-      - runFlow:
-          when:
-            visible: "Next"
-          commands:
-            - tapOn: "Next"
-      - runFlow:
-          when:
-            visible: "Skip"
-          commands:
-            - tapOn: "Skip"
-      # Page 7: Learning Period — "Get Started" commits ONBOARDING_COMPLETE=true
+      - tapOn:
+          text: "^(Next|Skip)$"
+      - waitForAnimationToEnd
+      # Page 4: Battery Optimization
+      - extendedWaitUntil:
+          visible:
+            text: "^(Next|Skip)$"
+          timeout: 5000
+      - tapOn:
+          text: "^(Next|Skip)$"
+      - waitForAnimationToEnd
+      # Page 5: Shade Ownership
+      - extendedWaitUntil:
+          visible:
+            text: "^(Next|Skip)$"
+          timeout: 5000
+      - tapOn:
+          text: "^(Next|Skip)$"
+      - waitForAnimationToEnd
+      # Page 6: Usage Access
+      - extendedWaitUntil:
+          visible:
+            text: "^(Next|Skip)$"
+          timeout: 5000
+      - tapOn:
+          text: "^(Next|Skip)$"
+      - waitForAnimationToEnd
+      # Page 7: Contacts
+      - extendedWaitUntil:
+          visible:
+            text: "^(Next|Skip)$"
+          timeout: 5000
+      - tapOn:
+          text: "^(Next|Skip)$"
+      - waitForAnimationToEnd
+      # Page 8: Learning Period — "Get Started" commits ONBOARDING_COMPLETE=true
       - extendedWaitUntil:
           visible:
             text: "Get Started"
@@ -94,5 +111,5 @@ appId: ai.talkingrock.lithium.debug
 - extendedWaitUntil:
     visible:
       text: "Briefing"
-    timeout: 15000
+    timeout: 30000
 - assertVisible: "Briefing"

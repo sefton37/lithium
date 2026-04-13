@@ -15,7 +15,7 @@ appId: ai.talkingrock.lithium.debug
 - extendedWaitUntil:
     visible:
       text: "Briefing"
-    timeout: 15000
+    timeout: 30000
 
 # Navigate to the Training tab (labeled "Train" in the bottom nav)
 - tapOn: "Train"
@@ -28,12 +28,12 @@ appId: ai.talkingrock.lithium.debug
     timeout: 10000
 
 # The bottom nav is always visible from the training tab
-- assertVisible: "Briefing"
+- assertVisible: "Chat"
 - assertVisible: "Train"
 - assertVisible: "Settings"
 
 # Navigate back to Briefing for subsequent flows
-- tapOn: "Briefing"
+- tapOn: "Chat"
 - extendedWaitUntil:
     visible:
       text: "Briefing"

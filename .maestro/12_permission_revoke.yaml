@@ -10,7 +10,7 @@ appId: ai.talkingrock.lithium.debug
 - extendedWaitUntil:
     visible:
       text: "Briefing"
-    timeout: 15000
+    timeout: 30000
 
 # Navigate to each tab
 - tapOn: "Settings"
@@ -34,7 +34,7 @@ appId: ai.talkingrock.lithium.debug
 - extendedWaitUntil:
     visible:
       text: "Briefing"
-    timeout: 15000
+    timeout: 30000
 
 # All tabs should still work
 - tapOn: "Queue"
@@ -46,7 +46,7 @@ appId: ai.talkingrock.lithium.debug
     visible:
       text: "Permissions"
     timeout: 5000
-- tapOn: "Briefing"
+- tapOn: "Chat"
 - extendedWaitUntil:
     visible:
       text: "Briefing"

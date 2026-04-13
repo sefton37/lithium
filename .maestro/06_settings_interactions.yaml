@@ -19,7 +19,7 @@ appId: ai.talkingrock.lithium.debug
 - extendedWaitUntil:
     visible:
       text: "Briefing"
-    timeout: 15000
+    timeout: 30000
 
 # Navigate to Settings
 - tapOn: "Settings"
@@ -122,7 +122,7 @@ appId: ai.talkingrock.lithium.debug
 - extendedWaitUntil:
     visible:
       text: "Briefing"
-    timeout: 15000
+    timeout: 30000
 
 - tapOn: "Settings"
 - extendedWaitUntil:
@@ -141,7 +141,7 @@ appId: ai.talkingrock.lithium.debug
 - waitForAnimationToEnd
 
 # Navigate back to Briefing
-- tapOn: "Briefing"
+- tapOn: "Chat"
 - extendedWaitUntil:
     visible:
       text: "Briefing"

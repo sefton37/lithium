@@ -7,6 +7,14 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 APP_ID="ai.talkingrock.lithium.debug"
 LISTENER="$APP_ID/ai.talkingrock.lithium.service.LithiumNotificationListener"
 
+# Pin to a specific device when ANDROID_SERIAL is set, so both adb and maestro
+# target the same device when multiple devices are attached.
+if [ -n "$ANDROID_SERIAL" ]; then
+    MAESTRO_DEVICE_FLAG="--device $ANDROID_SERIAL"
+else
+    MAESTRO_DEVICE_FLAG=""
+fi
+
 export PATH="$PATH:$HOME/Android/Sdk/platform-tools:$HOME/.maestro/bin"
 
 echo "=== Lithium Maestro Test Runner ==="
@@ -33,7 +41,7 @@ adb shell am force-stop "$APP_ID" 2>&1 || true
 sleep 1
 
 T0=$(date +%s)
-if maestro test "$SCRIPT_DIR/01_setup_screen.yaml"; then
+if maestro ${MAESTRO_DEVICE_FLAG:-} test "$SCRIPT_DIR/01_setup_screen.yaml"; then
     echo "PASSED: 01_setup_screen ($(( $(date +%s) - T0 ))s)"
     SETUP_RESULT="PASSED"
 else
@@ -76,7 +84,7 @@ echo "All permissions granted and test data sent."
 # ---------------------------------------------------------------
 echo ""
 echo "=== Phase 2.5: Completing onboarding flow ==="
-if maestro test "$SCRIPT_DIR/complete-onboarding.yaml"; then
+if maestro ${MAESTRO_DEVICE_FLAG:-} test "$SCRIPT_DIR/complete-onboarding.yaml"; then
     echo "Onboarding completed — app is on briefing screen."
 else
     echo "WARNING: Onboarding completion failed — remaining tests may fail."
@@ -89,7 +97,7 @@ echo ""
 if [ -n "$1" ]; then
     echo "=== Running single flow: $1 ==="
     T0=$(date +%s)
-    maestro test "$1"
+    maestro ${MAESTRO_DEVICE_FLAG:-} test "$1"
     echo "Finished in $(( $(date +%s) - T0 ))s"
 else
     echo "=== Phase 3: Running main test suite ==="
@@ -118,7 +126,7 @@ else
         echo ""
         echo "--- Running: $name ---"
         T0=$(date +%s)
-        if maestro test "$flow"; then
+        if maestro ${MAESTRO_DEVICE_FLAG:-} test "$flow"; then
             elapsed=$(( $(date +%s) - T0 ))
             echo "PASSED: $name (${elapsed}s)"
             PASSED=$((PASSED + 1))

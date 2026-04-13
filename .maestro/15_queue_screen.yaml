@@ -38,14 +38,14 @@ appId: ai.talkingrock.lithium.debug
       - assertVisible: "Clear reviewed"
 
 # Bottom nav invariant — the tab bar remains intact from the Queue tab
-- assertVisible: "Briefing"
+- assertVisible: "Chat"
 - assertVisible: "Queue"
 - assertVisible: "Rules"
 - assertVisible: "Train"
 - assertVisible: "Settings"
 
 # Navigate back to Briefing for subsequent flows
-- tapOn: "Briefing"
+- tapOn: "Chat"
 - extendedWaitUntil:
     visible:
       text: "Briefing"

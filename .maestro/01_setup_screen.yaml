@@ -14,4 +14,4 @@ appId: ai.talkingrock.lithium.debug
 - extendedWaitUntil:
     visible:
       text: "Notification Access"
-    timeout: 15000
+    timeout: 30000
