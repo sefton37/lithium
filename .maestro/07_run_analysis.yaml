@@ -19,16 +19,17 @@ appId: ai.talkingrock.lithium.debug
       text: "Permissions"
     timeout: 5000
 
-# Scroll to the Analysis section first — stable header regardless of run state.
+# The Run button label toggles between "Run Analysis Now" and "Running…"
+# depending on uiState.isRunningAnalysis, so scroll directly to a regex
+# that matches either label — this is both the scroll target and the tap
+# target, and it sidesteps the "Analysis" section header which can fall
+# outside the scrollable viewport in some layouts.
 - scrollUntilVisible:
     element:
-      text: "Analysis"
+      text: "^(Run Analysis Now|Running…)$"
     direction: DOWN
-
-# The run button toggles between "Run Analysis Now" and "Running…" based on
-# uiState.isRunningAnalysis. Tap via contentDescription, which is stable.
 - tapOn:
-    id: "Run analysis now"
+    text: "^(Run Analysis Now|Running…)$"
 
 # Let the worker queue. Snackbars disappear too fast to assert.
 - waitForAnimationToEnd
