@@ -34,7 +34,7 @@ appId: ai.talkingrock.lithium.debug
 # which guarantees exactly one advance per page regardless of permission state.
 - runFlow:
     when:
-      notVisible: "Your Briefing"
+      notVisible: "Briefing"
     commands:
       # Page 0: Title
       - extendedWaitUntil:
