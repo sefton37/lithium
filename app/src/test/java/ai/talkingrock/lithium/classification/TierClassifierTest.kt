@@ -23,6 +23,10 @@ class TierClassifierTest {
     @Test fun `self is tier 0`() =
         assertEquals(0 to "self", classify("ai.talkingrock.lithium"))
 
+    @Test fun `debug build self is tier 0`() =
+        // The debug build uses ai.talkingrock.lithium.debug; must still classify as self (tier 0).
+        assertEquals(0 to "self", classify("ai.talkingrock.lithium.debug"))
+
     @Test fun `spotify is tier 0`() =
         assertEquals(0 to "media_player", classify("com.spotify.music"))
 

@@ -27,7 +27,9 @@ object TierClassifier {
 
         val fullText = listOfNotNull(title, text).joinToString(" ").lowercase()
 
-        if (packageName == "ai.talkingrock.lithium") {
+        // startsWith covers both release ("ai.talkingrock.lithium") and debug
+        // ("ai.talkingrock.lithium.debug") build flavors.
+        if (packageName.startsWith("ai.talkingrock.lithium")) {
             return 0 to "self"
         }
 

@@ -32,7 +32,10 @@ object SafetyAllowlist {
         "com.google.android.dialer",
     )
 
-    private const val LITHIUM_PACKAGE = "ai.talkingrock.lithium"
+    // Base package prefix — covers both release ("ai.talkingrock.lithium") and debug
+    // ("ai.talkingrock.lithium.debug") build flavors. A startsWith check is safe because
+    // no other package on the device shares this prefix.
+    private const val LITHIUM_PACKAGE_PREFIX = "ai.talkingrock.lithium"
 
     // FLAG_FOREGROUND_SERVICE (android.app.Notification, value 0x00000040) — cancel silently fails on API 34+
     // where foreground service notifications are protected.
@@ -48,7 +51,8 @@ object SafetyAllowlist {
         val notification = sbn.notification
 
         // Lithium's own notifications — never cancel, would cause re-surface loops.
-        if (sbn.packageName == LITHIUM_PACKAGE) return true
+        // startsWith covers both release and debug build flavors.
+        if (sbn.packageName.startsWith(LITHIUM_PACKAGE_PREFIX)) return true
 
         // Known system packages — cancel silently fails.
         if (sbn.packageName in SYSTEM_PACKAGES) return true

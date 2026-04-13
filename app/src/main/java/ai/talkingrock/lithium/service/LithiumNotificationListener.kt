@@ -10,6 +10,7 @@ import androidx.core.app.NotificationCompat
 import androidx.room.withTransaction
 import ai.talkingrock.lithium.data.db.LithiumDatabase
 import ai.talkingrock.lithium.data.db.QueueDao
+import ai.talkingrock.lithium.data.db.ShadeModeSeeder
 import ai.talkingrock.lithium.data.model.NotificationRecord
 import ai.talkingrock.lithium.data.model.QueuedNotification
 import ai.talkingrock.lithium.data.repository.NotificationRepository
@@ -61,6 +62,7 @@ class LithiumNotificationListener : NotificationListenerService() {
     @Inject lateinit var contactsResolver: ContactsResolver
     @Inject lateinit var usageTracker: UsageTracker
     @Inject lateinit var shadeModeRepository: ShadeModeRepository
+    @Inject lateinit var shadeModeSeeder: ShadeModeSeeder
     @Inject lateinit var queueDao: QueueDao
     @Inject lateinit var notificationResurface: NotificationResurface
     @Inject lateinit var database: LithiumDatabase
@@ -86,6 +88,19 @@ class LithiumNotificationListener : NotificationListenerService() {
         super.onListenerConnected()
         listenerState.onConnected()
         Log.d(TAG, "Listener connected")
+
+        // Self-heal: if shade mode is enabled but seed rules were never inserted (e.g., seeder
+        // threw on first call, or SHADE_MODE_SEED_DONE flag is stale after a DB reset), run
+        // the seeder now. ShadeModeSeeder.seedIfNeeded() is idempotent — no-op when seeds exist.
+        if (shadeModeRepository.isEnabled.value) {
+            serviceScope.launch {
+                try {
+                    shadeModeSeeder.seedIfNeeded()
+                } catch (e: Exception) {
+                    Log.e(TAG, "seedIfNeeded failed on listener connect", e)
+                }
+            }
+        }
     }
 
     override fun onListenerDisconnected() {
@@ -136,9 +151,13 @@ class LithiumNotificationListener : NotificationListenerService() {
                 // window where the notification is removed from the shade but absent from DB.
                 val suppressed = record.copy(disposition = "suppressed")
                 serviceScope.launch {
-                    val rowId = notificationRepo.insert(suppressed)
-                    keyToRowId[sbnKey] = rowId
-                    cancelNotification(sbnKey)
+                    try {
+                        val rowId = notificationRepo.insert(suppressed)
+                        keyToRowId[sbnKey] = rowId
+                        cancelNotification(sbnKey)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "SUPPRESS: DB write failed for key=$sbnKey; cancelNotification skipped", e)
+                    }
                 }
             }
             RuleAction.QUEUE -> {
@@ -147,18 +166,22 @@ class LithiumNotificationListener : NotificationListenerService() {
                 // Crash between inserts (without transaction) → orphaned notification record (silent loss).
                 val queued = record.copy(disposition = "queued")
                 serviceScope.launch {
-                    val rowId = database.withTransaction {
-                        val id = notificationRepo.insert(queued)
-                        queueDao.enqueue(
-                            QueuedNotification(
-                                notificationId = id,
-                                queuedAtMs = System.currentTimeMillis()
+                    try {
+                        val rowId = database.withTransaction {
+                            val id = notificationRepo.insert(queued)
+                            queueDao.enqueue(
+                                QueuedNotification(
+                                    notificationId = id,
+                                    queuedAtMs = System.currentTimeMillis()
+                                )
                             )
-                        )
-                        id
+                            id
+                        }
+                        keyToRowId[sbnKey] = rowId
+                        cancelNotification(sbnKey)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "QUEUE: DB write failed for key=$sbnKey; cancelNotification skipped", e)
                     }
-                    keyToRowId[sbnKey] = rowId
-                    cancelNotification(sbnKey)
                 }
             }
             RuleAction.RESURFACE -> {

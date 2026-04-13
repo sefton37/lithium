@@ -95,6 +95,7 @@ class SettingsViewModel @Inject constructor(
 
     companion object {
         private const val APP_VERSION = "0.1.0"
+        private const val TAG = "SettingsViewModel"
     }
 
     private val _uiState = MutableStateFlow(
@@ -191,7 +192,13 @@ class SettingsViewModel @Inject constructor(
         // _uiState is updated reactively via the isEnabled collector in init.
         if (enabled) {
             viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                shadeModeSeeder.seedIfNeeded()
+                try {
+                    shadeModeSeeder.seedIfNeeded()
+                } catch (e: Exception) {
+                    // Log but do not surface to user — the listener service will retry
+                    // seedIfNeeded() in onListenerConnected() as a self-heal path.
+                    android.util.Log.e(TAG, "seedIfNeeded failed in setShadeModeEnabled", e)
+                }
             }
         }
     }

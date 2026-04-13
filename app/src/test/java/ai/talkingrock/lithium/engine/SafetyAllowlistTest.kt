@@ -49,6 +49,13 @@ class SafetyAllowlistTest {
         assertTrue(SafetyAllowlist.isSafetyExempt(sbn(packageName = "ai.talkingrock.lithium")))
     }
 
+    @Test fun `Lithium debug build package is exempt`() {
+        // The debug build uses a .debug suffix on the package name. Without this check,
+        // the reconnect nudge notification would be QUEUE'd and cancelled, creating a
+        // disconnect/reconnect loop in debug builds.
+        assertTrue(SafetyAllowlist.isSafetyExempt(sbn(packageName = "ai.talkingrock.lithium.debug")))
+    }
+
     @Test fun `android system package is exempt`() {
         assertTrue(SafetyAllowlist.isSafetyExempt(sbn(packageName = "android")))
     }
