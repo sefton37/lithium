@@ -41,24 +41,28 @@ appId: ai.talkingrock.lithium.debug
     element:
       text: "Analysis"
     direction: DOWN
+    centerElement: true
 - assertVisible: "Analysis"
 
 - scrollUntilVisible:
     element:
       text: "Data Retention"
     direction: DOWN
+    centerElement: true
 - assertVisible: "Data Retention"
 
 - scrollUntilVisible:
     element:
       text: "Diagnostics"
     direction: DOWN
+    centerElement: true
 - assertVisible: "Diagnostics"
 
 - scrollUntilVisible:
     element:
       text: "About"
     direction: DOWN
+    centerElement: true
 - assertVisible: "About"
 
 # --- Back to Briefing tab ---

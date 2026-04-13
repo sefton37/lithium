@@ -51,6 +51,7 @@ appId: ai.talkingrock.lithium.debug
     element:
       text: "About"
     direction: DOWN
+    centerElement: true
 - assertVisible: "by Talking Rock"
 
 # Return to Briefing — app should still be responsive

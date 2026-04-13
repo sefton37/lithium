@@ -28,6 +28,7 @@ appId: ai.talkingrock.lithium.debug
     element:
       text: "Purge All Data"
     direction: DOWN
+    centerElement: true
 
 # Tap the purge button (index 1 — first occurrence is the section header, second is the button)
 - tapOn:

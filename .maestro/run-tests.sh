@@ -24,6 +24,19 @@ fi
 
 export PATH="$PATH:$HOME/Android/Sdk/platform-tools:$HOME/.maestro/bin"
 
+# Detect physical device vs emulator. Emulator serials start with "emulator-".
+# On physical devices we skip destructive flows (purge-all-data) by default so
+# we can build up real learning data. Override with ALLOW_DESTRUCTIVE=1.
+DEVICE_IS_EMULATOR=0
+case "${ANDROID_SERIAL:-}" in
+    emulator-*) DEVICE_IS_EMULATOR=1 ;;
+esac
+if [ "$DEVICE_IS_EMULATOR" = "1" ] || [ "${ALLOW_DESTRUCTIVE:-0}" = "1" ]; then
+    SKIP_DESTRUCTIVE=0
+else
+    SKIP_DESTRUCTIVE=1
+fi
+
 # Results directory for this run
 RUN_TS="$(date '+%Y-%m-%d_%H%M%S')"
 RESULTS_DIR="$SCRIPT_DIR/results/$RUN_TS"
@@ -38,6 +51,12 @@ echo "=== Lithium Maestro Test Runner ==="
 echo "Run timestamp: $RUN_TS"
 echo "Results dir:   $RESULTS_DIR"
 echo "Started at:    $(date '+%Y-%m-%d %H:%M:%S')"
+if [ "$SKIP_DESTRUCTIVE" = "1" ]; then
+    echo "Device mode:   PHYSICAL — skipping destructive flows (09_purge_data)"
+    echo "               Set ALLOW_DESTRUCTIVE=1 to run them anyway."
+else
+    echo "Device mode:   EMULATOR — running full suite"
+fi
 
 # -----------------------------------------------------------------
 # Helpers
@@ -243,7 +262,7 @@ else
         "$SCRIPT_DIR/13_training_tab.yaml" \
         "$SCRIPT_DIR/14_suggestion_approve.yaml" \
         "$SCRIPT_DIR/15_queue_screen.yaml" \
-        "$SCRIPT_DIR/09_purge_data.yaml" \
+        $([ "$SKIP_DESTRUCTIVE" = "1" ] || echo "$SCRIPT_DIR/09_purge_data.yaml") \
         "$SCRIPT_DIR/10_stress_navigation.yaml" \
         "$SCRIPT_DIR/11_cold_start.yaml" \
         "$SCRIPT_DIR/12_permission_revoke.yaml"; do

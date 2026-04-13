@@ -28,6 +28,7 @@ appId: ai.talkingrock.lithium.debug
     element:
       text: "^(Run Analysis Now|Running…)$"
     direction: DOWN
+    centerElement: true
 - tapOn:
     text: "^(Run Analysis Now|Running…)$"
 

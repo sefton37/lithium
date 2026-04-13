@@ -37,30 +37,35 @@ appId: ai.talkingrock.lithium.debug
     element:
       text: "Analysis"
     direction: DOWN
+    centerElement: true
 - assertVisible: "Analysis"
 
 - scrollUntilVisible:
     element:
       text: "Require charging"
     direction: DOWN
+    centerElement: true
 - assertVisible: "Require charging"
 
 - scrollUntilVisible:
     element:
       text: "Require battery not low"
     direction: DOWN
+    centerElement: true
 - assertVisible: "Require battery not low"
 
 - scrollUntilVisible:
     element:
       text: "Require device idle"
     direction: DOWN
+    centerElement: true
 - assertVisible: "Require device idle"
 
 - scrollUntilVisible:
     element:
       text: "Run Analysis Now"
     direction: DOWN
+    centerElement: true
 - assertVisible: "Run Analysis Now"
 
 # --- Data Retention Section ---
@@ -68,6 +73,7 @@ appId: ai.talkingrock.lithium.debug
     element:
       text: "Data Retention"
     direction: DOWN
+    centerElement: true
 - assertVisible: "Data Retention"
 
 # --- Purge Section ---
@@ -75,6 +81,7 @@ appId: ai.talkingrock.lithium.debug
     element:
       text: "Purge All Data"
     direction: DOWN
+    centerElement: true
 
 # Tap purge button (second occurrence — first is section header) and verify dialog
 - tapOn:
@@ -99,6 +106,7 @@ appId: ai.talkingrock.lithium.debug
     element:
       text: "Diagnostics"
     direction: DOWN
+    centerElement: true
 - assertVisible: "Anonymous diagnostics"
 
 # Toggle "Anonymous diagnostics" (exercises setDiagnosticsEnabled write path).
@@ -111,6 +119,7 @@ appId: ai.talkingrock.lithium.debug
     element:
       text: "About"
     direction: DOWN
+    centerElement: true
 - assertVisible: "by Talking Rock"
 
 # ---- Persistence check: relaunch and confirm Settings still renders, then
@@ -134,6 +143,7 @@ appId: ai.talkingrock.lithium.debug
     element:
       text: "Diagnostics"
     direction: DOWN
+    centerElement: true
 - assertVisible: "Anonymous diagnostics"
 
 # Toggle back to restore original state for subsequent flows

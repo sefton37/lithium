@@ -29,12 +29,14 @@ appId: ai.talkingrock.lithium.debug
 
 # Tap the FAB to add a rule (Compose FAB exposes contentDescription)
 - tapOn: "Add rule"
+- waitForAnimationToEnd
 
-# Should see the Add Rule form
+# Should see the Add Rule form. Navigation can take a beat on physical
+# devices after a FAB tap — extend the wait.
 - extendedWaitUntil:
     visible:
       text: "New Rule"
-    timeout: 10000
+    timeout: 20000
 
 # Verify form fields are present
 - assertVisible: "App"
