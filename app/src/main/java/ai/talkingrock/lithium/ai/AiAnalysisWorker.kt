@@ -13,6 +13,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import ai.talkingrock.lithium.MainActivity
 import ai.talkingrock.lithium.data.Prefs
+import ai.talkingrock.lithium.ai.scoring.ScoringRefit
 import ai.talkingrock.lithium.data.db.NotificationDao
 import ai.talkingrock.lithium.data.db.SessionDao
 import ai.talkingrock.lithium.data.repository.BehaviorProfileRepository
@@ -61,6 +62,7 @@ class AiAnalysisWorker @AssistedInject constructor(
     private val suggestionGenerator: SuggestionGenerator,
     private val reportRepository: ReportRepository,
     private val behaviorProfileRepository: BehaviorProfileRepository,
+    private val scoringRefit: ScoringRefit,
     private val sharedPreferences: SharedPreferences,
     @Named("modelDir") private val modelDir: String
 ) : CoroutineWorker(appContext, workerParams) {
@@ -277,6 +279,19 @@ class AiAnalysisWorker @AssistedInject constructor(
         } catch (e: Exception) {
             Log.e(TAG, "doWork: retention cleanup failed", e)
             // Non-fatal: cleanup will retry on the next worker run.
+        }
+
+        // ---------------------------------------------------------------------------------
+        // Step 6.5: Scoring refit — Bradley-Terry replay, category-weight fit, quantile
+        // recompute. Internally debounced: skips if fewer than REFIT_MIN_NEW_JUDGMENTS
+        // explicit judgments since last run. Wrapped in try/catch so a refit failure does
+        // not block profile accumulation below.
+        // ---------------------------------------------------------------------------------
+        try {
+            scoringRefit.refit()
+            Log.d(TAG, "doWork: scoring refit complete")
+        } catch (e: Exception) {
+            Log.e(TAG, "doWork: scoring refit failed", e)
         }
 
         // ---------------------------------------------------------------------------------

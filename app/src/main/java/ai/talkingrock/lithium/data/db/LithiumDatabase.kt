@@ -12,6 +12,7 @@ import ai.talkingrock.lithium.data.model.AppBattleJudgment
 import ai.talkingrock.lithium.data.model.AppRanking
 import ai.talkingrock.lithium.data.model.ChannelRanking
 import ai.talkingrock.lithium.data.model.ImplicitJudgment
+import ai.talkingrock.lithium.data.model.NotificationChannel
 import ai.talkingrock.lithium.data.model.QueuedNotification
 import ai.talkingrock.lithium.data.model.ScoreQuantiles
 import ai.talkingrock.lithium.data.model.TrainingJudgment
@@ -59,6 +60,7 @@ import ai.talkingrock.lithium.data.model.TrainingJudgment
         AppBattleJudgment::class,
         ChannelRanking::class,
         ImplicitJudgment::class,
+        NotificationChannel::class,
         ScoreQuantiles::class,
     ],
     version = 12,
@@ -77,5 +79,6 @@ abstract class LithiumDatabase : RoomDatabase() {
     abstract fun appBattleJudgmentDao(): AppBattleJudgmentDao
     abstract fun channelRankingDao(): ChannelRankingDao
     abstract fun implicitJudgmentDao(): ImplicitJudgmentDao
+    abstract fun notificationChannelDao(): NotificationChannelDao
     abstract fun scoreQuantilesDao(): ScoreQuantilesDao
 }

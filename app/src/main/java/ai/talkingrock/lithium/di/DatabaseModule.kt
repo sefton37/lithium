@@ -25,6 +25,7 @@ import ai.talkingrock.lithium.data.db.AppBattleJudgmentDao
 import ai.talkingrock.lithium.data.db.AppRankingDao
 import ai.talkingrock.lithium.data.db.ChannelRankingDao
 import ai.talkingrock.lithium.data.db.ImplicitJudgmentDao
+import ai.talkingrock.lithium.data.db.NotificationChannelDao
 import ai.talkingrock.lithium.data.db.ScoreQuantilesDao
 import ai.talkingrock.lithium.data.db.TrainingJudgmentDao
 import java.security.KeyStore
@@ -446,6 +447,10 @@ object DatabaseModule {
     @Provides
     fun provideImplicitJudgmentDao(db: LithiumDatabase): ImplicitJudgmentDao =
         db.implicitJudgmentDao()
+
+    @Provides
+    fun provideNotificationChannelDao(db: LithiumDatabase): NotificationChannelDao =
+        db.notificationChannelDao()
 
     @Provides
     fun provideScoreQuantilesDao(db: LithiumDatabase): ScoreQuantilesDao =

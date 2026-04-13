@@ -15,11 +15,15 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.room.withTransaction
 import ai.talkingrock.lithium.MainActivity
+import ai.talkingrock.lithium.ai.scoring.Scorer
+import ai.talkingrock.lithium.ai.scoring.TierMapper
 import ai.talkingrock.lithium.data.db.ImplicitJudgmentDao
 import ai.talkingrock.lithium.data.db.LithiumDatabase
+import ai.talkingrock.lithium.data.db.NotificationChannelDao
 import ai.talkingrock.lithium.data.db.QueueDao
 import ai.talkingrock.lithium.data.db.ShadeModeSeeder
 import ai.talkingrock.lithium.data.model.ImplicitJudgment
+import ai.talkingrock.lithium.data.model.NotificationChannel
 import ai.talkingrock.lithium.data.model.NotificationRecord
 import ai.talkingrock.lithium.data.model.QueuedNotification
 import ai.talkingrock.lithium.data.repository.NotificationRepository
@@ -77,6 +81,9 @@ class LithiumNotificationListener : NotificationListenerService() {
     @Inject lateinit var notificationResurface: NotificationResurface
     @Inject lateinit var database: LithiumDatabase
     @Inject lateinit var implicitDao: ImplicitJudgmentDao
+    @Inject lateinit var notificationChannelDao: NotificationChannelDao
+    @Inject lateinit var scorer: Scorer
+    @Inject lateinit var tierMapper: TierMapper
 
     private lateinit var serviceScope: CoroutineScope
 
@@ -158,6 +165,7 @@ class LithiumNotificationListener : NotificationListenerService() {
             serviceScope.launch {
                 val rowId = notificationRepo.insert(record)
                 keyToRowId[sbn.key] = rowId
+                postInsertActions(sbn, rowId, record)
             }
             return
         }
@@ -168,6 +176,7 @@ class LithiumNotificationListener : NotificationListenerService() {
             serviceScope.launch {
                 val rowId = notificationRepo.insert(record)
                 keyToRowId[sbn.key] = rowId
+                postInsertActions(sbn, rowId, record)
             }
             return
         }
@@ -194,6 +203,7 @@ class LithiumNotificationListener : NotificationListenerService() {
                         val rowId = notificationRepo.insert(suppressed)
                         keyToRowId[sbnKey] = rowId
                         cancelNotification(sbnKey)
+                        postInsertActions(sbn, rowId, suppressed)
                     } catch (e: Exception) {
                         Log.e(TAG, "SUPPRESS: DB write failed for key=$sbnKey; cancelNotification skipped", e)
                     }
@@ -218,6 +228,7 @@ class LithiumNotificationListener : NotificationListenerService() {
                         }
                         keyToRowId[sbnKey] = rowId
                         cancelNotification(sbnKey)
+                        postInsertActions(sbn, rowId, queued)
                     } catch (e: Exception) {
                         Log.e(TAG, "QUEUE: DB write failed for key=$sbnKey; cancelNotification skipped", e)
                     }
@@ -240,6 +251,7 @@ class LithiumNotificationListener : NotificationListenerService() {
                     val rowId = notificationRepo.insert(resurfaced)
                     keyToRowId[sbnKey] = rowId
                     cancelNotification(sbnKey)
+                    postInsertActions(sbn, rowId, resurfaced)
                 }
             }
             RuleAction.ALLOW -> {
@@ -247,6 +259,7 @@ class LithiumNotificationListener : NotificationListenerService() {
                 serviceScope.launch {
                     val rowId = notificationRepo.insert(allowed)
                     keyToRowId[sbnKey] = rowId
+                    postInsertActions(sbn, rowId, allowed)
                 }
             }
         }
@@ -436,6 +449,64 @@ class LithiumNotificationListener : NotificationListenerService() {
             tierReason = tierReason,
             disposition = disposition,
         )
+    }
+
+    /**
+     * Runs after every successful NotificationRecord insert in any disposition path
+     * (safety_exempt, allowed, suppressed, queued, resurfaced). Two responsibilities:
+     *
+     * 1. Cache the notification's channel display name into `notification_channels`
+     *    so the training UI can show human-readable names instead of raw channelId.
+     *    Best-effort: Ranking lookup may return null on some OEMs / API levels.
+     *
+     * 2. Score the record via the hierarchical Scorer. When the scorer reports
+     *    `hasAppSignal = true` (i.e. the user has any training history for this
+     *    package), rewrite the record's tier to match the learned score. Falls back
+     *    to the TierClassifier-assigned tier otherwise. This is how training actually
+     *    changes what the user sees on their shade.
+     */
+    private suspend fun postInsertActions(sbn: StatusBarNotification, rowId: Long, record: NotificationRecord) {
+        // Channel-name cache — best-effort, does not block scoring on failure.
+        val channelId = record.channelId
+        if (!channelId.isNullOrBlank()) {
+            val channelDisplayName: String? = try {
+                val r = Ranking()
+                if (currentRanking?.getRanking(sbn.key, r) == true) r.channel?.name?.toString() else null
+            } catch (_: Throwable) { null }
+            try {
+                notificationChannelDao.upsert(NotificationChannel(
+                    packageName = record.packageName,
+                    channelId = channelId,
+                    displayName = channelDisplayName,
+                    lastSeenMs = record.postedAtMs,
+                ))
+            } catch (e: Exception) {
+                Log.w(TAG, "channelDao.upsert failed for ${record.packageName}/$channelId: ${e.message}")
+            }
+        }
+
+        // Scorer — only rewrite tier when there is actual training signal.
+        try {
+            val result = scorer.score(
+                packageName = record.packageName,
+                channelId = record.channelId,
+                aiClassification = record.aiClassification,
+                aiConfidence = record.aiConfidence,
+                isFromContact = record.isFromContact,
+            )
+            if (result.hasAppSignal) {
+                val newTier = tierMapper.mapToTier(result.score)
+                if (newTier != record.tier) {
+                    val reason = "scorer:s=${"%.2f".format(result.score)}"
+                    notificationRepo.updateTier(rowId, newTier, reason)
+                    Log.d(TAG, "scorer: id=$rowId pkg=${record.packageName} " +
+                        "s=${"%.3f".format(result.score)} tier=${record.tier}→$newTier " +
+                        "contribs=${result.contributions}")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "scorer.score failed for ${record.packageName}", e)
+        }
     }
 
     private fun removalReasonString(reason: Int): String = when (reason) {

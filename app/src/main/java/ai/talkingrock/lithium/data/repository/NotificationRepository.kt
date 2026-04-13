@@ -31,6 +31,12 @@ class NotificationRepository @Inject constructor(
             dao.updateRemoval(id, removedAtMs, reason)
         }
 
+    /** Overwrite tier assignment (used by Scorer when training signal exists). */
+    suspend fun updateTier(id: Long, tier: Int, reason: String) =
+        withContext(Dispatchers.IO) {
+            dao.updateTier(id, tier, reason)
+        }
+
     /** Reactive stream of notifications posted since [sinceMs], newest first. */
     fun getRecent(sinceMs: Long): Flow<List<NotificationRecord>> = dao.getRecent(sinceMs)
 

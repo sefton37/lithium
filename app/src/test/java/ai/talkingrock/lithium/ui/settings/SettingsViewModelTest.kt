@@ -2,8 +2,10 @@ package ai.talkingrock.lithium.ui.settings
 
 import android.content.SharedPreferences
 import androidx.work.WorkManager
+import ai.talkingrock.lithium.ai.scoring.ScoringRefit
 import ai.talkingrock.lithium.data.Prefs
 import ai.talkingrock.lithium.data.db.AppBehaviorProfileDao
+import ai.talkingrock.lithium.data.db.ImplicitJudgmentDao
 import ai.talkingrock.lithium.data.db.NotificationDao
 import ai.talkingrock.lithium.data.db.QueueDao
 import ai.talkingrock.lithium.data.db.ReportDao
@@ -101,7 +103,9 @@ class SettingsViewModelTest {
             context, listenerState, sharedPrefs,
             notificationDao, sessionDao, reportDao,
             suggestionDao, queueDao, behaviorProfileDao,
-            shadeModeRepository, shadeModeSeeder
+            shadeModeRepository, shadeModeSeeder,
+            mockk<ScoringRefit>(relaxed = true),
+            mockk<ImplicitJudgmentDao>(relaxed = true),
         )
     }
 

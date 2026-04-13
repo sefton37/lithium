@@ -64,14 +64,17 @@ interface TrainingJudgmentDao {
      * Judgments where either notification no longer exists (deleted by retention)
      * are excluded via INNER JOIN — orphaned judgments cannot be replayed.
      *
-     * Note: left_channel_id and right_channel_id are snapshot columns to be added
-     * in a later schema migration. Until then they are returned as NULL, which causes
-     * ScoringRefit to skip those rows for channel-pair Elo (correct default behaviour).
+     * Note: per-judgment snapshot columns for `left_channel_id` / `right_channel_id`
+     * do not exist on `training_judgments` yet (future schema work would add them so
+     * channel renames don't retroactively change historical training signal). Until
+     * then we fall back to the notification's current channel_id from the JOIN. This
+     * is fine for ranking purposes — the ranking is about the notification, not the
+     * channel name string.
      */
     @Query(
         "SELECT tj.id, tj.choice, tj.created_at_ms, " +
         "  tj.left_notification_id, tj.right_notification_id, " +
-        "  NULL AS left_channel_id, NULL AS right_channel_id, " +
+        "  ln.channel_id AS left_channel_id, rn.channel_id AS right_channel_id, " +
         "  tj.left_ai_classification, tj.right_ai_classification, " +
         "  tj.left_confidence, tj.right_confidence, " +
         "  ln.package_name AS left_pkg, ln.channel_id AS left_chan, " +
