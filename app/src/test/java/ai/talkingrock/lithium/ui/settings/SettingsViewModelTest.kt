@@ -76,7 +76,8 @@ class SettingsViewModelTest {
         queueDao = mockk()
         behaviorProfileDao = mockk()
         shadeModeRepository = mockk(relaxed = true)
-        every { shadeModeRepository.isEnabled } returns MutableStateFlow(false)
+        // Shade Mode defaults to ON from install per user decision (overrides plan Risk 3).
+        every { shadeModeRepository.isEnabled } returns MutableStateFlow(true)
         shadeModeSeeder = mockk(relaxed = true)
         workManager = mockk(relaxed = true)
 
@@ -251,6 +252,20 @@ class SettingsViewModelTest {
 
         assertTrue("notificationAccessGranted should be true when listener connected",
             vm.uiState.value.notificationAccessGranted)
+    }
+
+    // ── Shade Mode initial state ──────────────────────────────────────────────
+
+    @Test
+    fun `initial shadeModeEnabled is true (ON by default)`() = runTest {
+        // The repository mock returns true (shadeModeRepository.isEnabled returns MutableStateFlow(true)).
+        val vm = makeViewModel()
+        advanceUntilIdle()
+
+        assertTrue(
+            "Shade Mode must default to ON — the persistent notification is the user-visible indicator",
+            vm.uiState.value.shadeModeEnabled
+        )
     }
 
     // ── Shade Mode access guard (fix #8) ─────────────────────────────────────

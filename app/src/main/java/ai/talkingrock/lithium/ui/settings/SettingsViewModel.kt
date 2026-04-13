@@ -64,8 +64,12 @@ data class SettingsUiState(
     val requireBatteryNotLow: Boolean = Prefs.DEFAULT_REQUIRE_BATTERY_NOT_LOW,
     val requireIdle: Boolean = Prefs.DEFAULT_REQUIRE_IDLE,
     val isRunningAnalysis: Boolean = false,
-    /** Whether Shade Mode is enabled. Defaults to false — must be explicitly opted in. */
-    val shadeModeEnabled: Boolean = false,
+    /**
+     * Whether Shade Mode is enabled. Defaults to true — Shade Mode is ON from install.
+     * The ViewModel always initialises from [ShadeModeRepository.isEnabled] on construction,
+     * so this default is rarely seen in practice.
+     */
+    val shadeModeEnabled: Boolean = true,
 )
 
 /**

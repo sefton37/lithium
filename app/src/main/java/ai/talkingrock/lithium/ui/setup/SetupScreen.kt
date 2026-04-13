@@ -519,12 +519,11 @@ private fun ContactsPage(granted: Boolean, onGrant: () -> Unit) {
 @Composable
 private fun ShadeOwnershipPage() {
     OnboardingPage(
-        title = "Shade Ownership (optional)",
-        body = "Lithium can take control of your notification shade. When enabled in Settings, " +
-                "it intercepts every notification before it appears, suppresses noise, and queues " +
-                "everything else for your briefing. By default, Tier 3 notifications — texts from " +
-                "contacts, 2FA codes — pass through immediately, and calls and alarms always get " +
-                "through no matter what. You can enable or disable this at any time."
+        title = "Shade Mode",
+        body = "Lithium is already in control of your notification shade. It intercepts every " +
+                "notification, suppresses noise, and queues the rest for your briefing. Calls " +
+                "and alarms always get through. Tier 3 notifications — texts from contacts, " +
+                "2FA codes — pass through by default. You can turn Shade Mode off anytime in Settings."
     )
 }
 

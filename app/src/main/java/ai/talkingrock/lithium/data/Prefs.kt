@@ -32,7 +32,12 @@ object Prefs {
 
     // -- Shade Mode --
 
-    /** Boolean: true when the user has enabled Shade Mode (notification interception). Default false. */
+    /**
+     * Boolean: true when Shade Mode (notification interception) is enabled.
+     * Default true — Shade Mode is ON from first install. The persistent
+     * notification in the shade acts as the user-visible indicator that Lithium
+     * is active. The user can turn it off at any time in Settings.
+     */
     const val SHADE_MODE_ENABLED = "shade_mode_enabled"
 
     /**

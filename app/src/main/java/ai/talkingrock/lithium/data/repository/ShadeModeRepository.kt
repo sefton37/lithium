@@ -15,15 +15,17 @@ import javax.inject.Singleton
  * [MutableStateFlow] and a SharedPreferences.OnSharedPreferenceChangeListener.
  * The listener service may read [isEnabled] synchronously before any UI collector exists.
  *
- * Shade Mode defaults to OFF (SHADE_MODE_ENABLED absent = false). This is intentional
- * and must not be changed. The user must explicitly opt in.
+ * Shade Mode defaults to ON from install. The persistent notification in the shade
+ * (NOTIF_ID_PERSISTENT) acts as the user-visible indicator that Lithium is active,
+ * satisfying the "user always knows" requirement. The user can turn Shade Mode off
+ * at any time in Settings.
  */
 @Singleton
 class ShadeModeRepository @Inject constructor(
     private val sharedPreferences: SharedPreferences
 ) {
     private val _isEnabled = MutableStateFlow(
-        sharedPreferences.getBoolean(Prefs.SHADE_MODE_ENABLED, false)
+        sharedPreferences.getBoolean(Prefs.SHADE_MODE_ENABLED, true)
     )
 
     // Listener kept alive as a field so it is not garbage-collected.
@@ -31,7 +33,7 @@ class ShadeModeRepository @Inject constructor(
     private val prefListener = object : SharedPreferences.OnSharedPreferenceChangeListener {
         override fun onSharedPreferenceChanged(prefs: SharedPreferences, key: String?) {
             if (key == Prefs.SHADE_MODE_ENABLED) {
-                _isEnabled.value = prefs.getBoolean(Prefs.SHADE_MODE_ENABLED, false)
+                _isEnabled.value = prefs.getBoolean(Prefs.SHADE_MODE_ENABLED, true)
             }
         }
     }

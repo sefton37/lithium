@@ -2,12 +2,15 @@ package ai.talkingrock.lithium.service
 
 import android.app.Notification
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.ComponentName
+import android.content.Intent
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.room.withTransaction
+import ai.talkingrock.lithium.MainActivity
 import ai.talkingrock.lithium.data.db.LithiumDatabase
 import ai.talkingrock.lithium.data.db.QueueDao
 import ai.talkingrock.lithium.data.db.ShadeModeSeeder
@@ -25,6 +28,7 @@ import ai.talkingrock.lithium.engine.UsageTracker
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
@@ -69,6 +73,10 @@ class LithiumNotificationListener : NotificationListenerService() {
 
     private lateinit var serviceScope: CoroutineScope
 
+    // Coroutine job that collects the shade-mode StateFlow and manages the persistent
+    // notification lifecycle. Cancelled with serviceScope in onDestroy.
+    private var shadeModeCollectorJob: Job? = null
+
     // In-memory map of notification key -> database row ID, used to update removal records.
     // Keyed by the SBN key (package:id:tag) which is stable within a process lifetime.
     // ConcurrentHashMap: written from IO coroutine, read from main thread in onNotificationRemoved.
@@ -101,6 +109,10 @@ class LithiumNotificationListener : NotificationListenerService() {
                 }
             }
         }
+
+        // Start collecting the shade-mode StateFlow so the persistent notification
+        // is posted/cancelled whenever the user toggles Shade Mode.
+        startShadeModeCollector()
     }
 
     override fun onListenerDisconnected() {
@@ -115,6 +127,11 @@ class LithiumNotificationListener : NotificationListenerService() {
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         // --- Safety allowlist: checked FIRST, before shade-mode gate or rule evaluation ---
         if (SafetyAllowlist.isSafetyExempt(sbn)) {
+            // Lithium's own notifications (persistent indicator, reconnect nudge, readiness
+            // alerts) are safety-exempt by package prefix. Skip the DB write entirely to
+            // avoid polluting the notification history with self-posts.
+            if (sbn.packageName.startsWith(LITHIUM_PACKAGE_PREFIX)) return
+
             val record = buildRecord(sbn, disposition = "safety_exempt")
             serviceScope.launch {
                 val rowId = notificationRepo.insert(record)
@@ -295,6 +312,71 @@ class LithiumNotificationListener : NotificationListenerService() {
     }
 
     /**
+     * Collects the shade-mode [StateFlow] and manages the persistent notification.
+     *
+     * Called once from [onListenerConnected]. Any previous job is cancelled first so
+     * re-binding (service restart) doesn't double-collect. The job is a child of
+     * [serviceScope] and is automatically cancelled in [onDestroy].
+     */
+    private fun startShadeModeCollector() {
+        shadeModeCollectorJob?.cancel()
+        shadeModeCollectorJob = serviceScope.launch {
+            shadeModeRepository.isEnabled.collect { enabled ->
+                if (enabled) {
+                    postPersistentNotification()
+                } else {
+                    cancelPersistentNotification()
+                }
+            }
+        }
+    }
+
+    /**
+     * Posts (or updates) the persistent Lithium indicator notification in the shade.
+     *
+     * Uses [FLAG_ONGOING_EVENT] so the user cannot accidentally swipe it away.
+     * Lives on the low-importance [NotificationChannelRegistry.CHANNEL_SYSTEM] channel
+     * so it produces no sound or vibration.
+     *
+     * The notification acts as a one-tap shortcut into [MainActivity] and makes it
+     * immediately visible to the user that Shade Mode is active.
+     */
+    private fun postPersistentNotification() {
+        val nm = getSystemService(NotificationManager::class.java)
+        val launchIntent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            0,
+            launchIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val notification = NotificationCompat.Builder(this, NotificationChannelRegistry.CHANNEL_SYSTEM)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle("Lithium — Shade Mode Active")
+            .setContentText("Tap to open")
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setOngoing(true)
+            .setContentIntent(pendingIntent)
+            .build()
+
+        nm.notify(NOTIF_ID_PERSISTENT, notification)
+        Log.d(TAG, "Persistent notification posted")
+    }
+
+    /**
+     * Cancels the persistent Lithium indicator notification.
+     * Called when the user disables Shade Mode.
+     */
+    private fun cancelPersistentNotification() {
+        val nm = getSystemService(NotificationManager::class.java)
+        nm.cancel(NOTIF_ID_PERSISTENT)
+        Log.d(TAG, "Persistent notification cancelled")
+    }
+
+    /**
      * Posts a low-priority notification when the listener is disconnected.
      *
      * If Shade Mode is enabled, the nudge communicates urgency ("protection paused").
@@ -324,6 +406,19 @@ class LithiumNotificationListener : NotificationListenerService() {
     companion object {
         private const val TAG = "LithiumListener"
         private const val NUDGE_NOTIFICATION_ID = 1001
+
+        /**
+         * Notification ID for the persistent "Shade Mode Active" indicator.
+         * This notification lives in the shade as long as Shade Mode is enabled,
+         * providing the user with a one-tap shortcut into the app.
+         */
+        const val NOTIF_ID_PERSISTENT = 1002
+
+        /**
+         * Lithium's own package prefix — covers both release ("ai.talkingrock.lithium")
+         * and debug ("ai.talkingrock.lithium.debug") build flavors.
+         */
+        private const val LITHIUM_PACKAGE_PREFIX = "ai.talkingrock.lithium"
 
         /** Delay before querying usage events after a notification tap, to allow app launch. */
         private const val TAP_SESSION_DELAY_MS = 5_000L

@@ -97,6 +97,38 @@ class SafetyAllowlistTest {
         assertTrue(SafetyAllowlist.isSafetyExempt(sbn(flags = 0x00000040 or 0x00000010)))
     }
 
+    // ── Persistent notification loop safety ───────────────────────────────────
+
+    @Test
+    fun `persistent notification (Lithium self-package, ongoing) is safety exempt`() {
+        // The Shade Mode persistent notification is posted by Lithium itself with FLAG_ONGOING.
+        // It must be caught by the safety allowlist (self-package check) so it is never
+        // passed to rule evaluation. Both the self-package and isOngoing checks independently
+        // guarantee exemption — this test uses both to mirror the real notification's flags.
+        val persistentSbn = sbn(
+            packageName = "ai.talkingrock.lithium",
+            isOngoing = true,
+            category = null,
+            flags = 0x00000002, // FLAG_ONGOING_EVENT
+        )
+        assertTrue(
+            "Persistent Lithium notification must be safety-exempt to prevent a cancel loop",
+            SafetyAllowlist.isSafetyExempt(persistentSbn)
+        )
+    }
+
+    @Test
+    fun `persistent notification debug build (Lithium debug package, ongoing) is safety exempt`() {
+        val persistentDebugSbn = sbn(
+            packageName = "ai.talkingrock.lithium.debug",
+            isOngoing = true,
+        )
+        assertTrue(
+            "Debug build persistent notification must also be safety-exempt",
+            SafetyAllowlist.isSafetyExempt(persistentDebugSbn)
+        )
+    }
+
     // ── Negative cases ────────────────────────────────────────────────────────
 
     @Test fun `normal app notification with no exemption conditions returns false`() {

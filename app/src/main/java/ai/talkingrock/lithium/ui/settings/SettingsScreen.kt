@@ -123,7 +123,10 @@ fun SettingsScreen(
             SectionHeader("Shade Mode")
             Spacer(Modifier.height(8.dp))
             Text(
-                text = "Lithium intercepts all notifications and decides what appears in your shade.",
+                text = "Lithium is in control of your notification shade. It intercepts every " +
+                        "notification, suppresses noise, and queues the rest for your briefing. " +
+                        "Calls and alarms always get through. Tier 3 notifications — texts from " +
+                        "contacts, 2FA codes — pass through by default.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
