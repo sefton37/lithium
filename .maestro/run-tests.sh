@@ -70,16 +70,40 @@ run_flow() {
     # Capture logcat tail for this flow
     adb ${ANDROID_SERIAL:+-s "$ANDROID_SERIAL"} logcat -d > "$RESULTS_DIR/$name.logcat" 2>/dev/null || true
 
-    # Identify the new maestro dir created during this flow
-    local new_dir
-    new_dir=$(ls "$HOME/.maestro/tests/" 2>/dev/null | sort \
-        | comm -13 "$before_marker" - | tail -1)
+    # Identify new maestro dirs created during this flow. On failure Maestro
+    # may split artifacts across two sibling dirs (one with maestro.log, one
+    # with the ❌ screenshot + commands JSON), so we collect all new dirs and
+    # pick the one with maestro.log as the primary (for grepping), and
+    # separately locate the screenshot regardless of which dir holds it.
+    local new_dirs=()
+    while IFS= read -r d; do
+        [ -n "$d" ] && new_dirs+=("$HOME/.maestro/tests/$d")
+    done < <(ls "$HOME/.maestro/tests/" 2>/dev/null | sort | comm -13 "$before_marker" -)
     rm -f "$before_marker"
-    if [ -n "$new_dir" ]; then
-        LAST_MAESTRO_DIR="$HOME/.maestro/tests/$new_dir"
-        ln -sfn "$LAST_MAESTRO_DIR" "$RESULTS_DIR/$name.maestro-dir"
-    else
-        LAST_MAESTRO_DIR=""
+
+    LAST_MAESTRO_DIR=""
+    local log_dir="" shot="" ai_report=""
+    for d in "${new_dirs[@]}"; do
+        [ -f "$d/maestro.log" ] && log_dir="$d"
+        local s
+        s=$(ls "$d"/screenshot-❌-* 2>/dev/null | head -1)
+        [ -n "$s" ] && shot="$s"
+        [ -f "$d/ai-report-$name.html" ] && ai_report="$d/ai-report-$name.html"
+    done
+    # Prefer log_dir as the primary symlink target (it has the full command
+    # trace); if absent, fall back to the last new dir.
+    if [ -n "$log_dir" ]; then
+        LAST_MAESTRO_DIR="$log_dir"
+    elif [ ${#new_dirs[@]} -gt 0 ]; then
+        LAST_MAESTRO_DIR="${new_dirs[-1]}"
+    fi
+    [ -n "$LAST_MAESTRO_DIR" ] && ln -sfn "$LAST_MAESTRO_DIR" "$RESULTS_DIR/$name.maestro-dir"
+    # Second symlink for the artifact dir if it differs from log_dir
+    if [ -n "$shot" ]; then
+        local shot_dir
+        shot_dir="$(dirname "$shot")"
+        [ "$shot_dir" != "$LAST_MAESTRO_DIR" ] \
+            && ln -sfn "$shot_dir" "$RESULTS_DIR/$name.artifacts-dir"
     fi
 
     if [ $rc -eq 0 ]; then
@@ -88,19 +112,16 @@ run_flow() {
     else
         echo "FAILED: $name (${LAST_FLOW_ELAPSED}s)"
         LAST_FLOW_RESULT="FAILED"
-        if [ -n "$LAST_MAESTRO_DIR" ] && [ -f "$LAST_MAESTRO_DIR/maestro.log" ]; then
+        if [ -n "$log_dir" ] && [ -f "$log_dir/maestro.log" ]; then
             echo ""
-            echo "  Failure tail (from $LAST_MAESTRO_DIR/maestro.log):"
+            echo "  Failure tail (from $log_dir/maestro.log):"
             grep -E "FAILED|ERROR|CommandFailed|Element not found|Assertion" \
-                "$LAST_MAESTRO_DIR/maestro.log" 2>/dev/null \
+                "$log_dir/maestro.log" 2>/dev/null \
                 | sed 's/metadata CommandMetadata.*//' \
                 | tail -6 | sed 's/^/    /'
-            local shot
-            shot=$(ls "$LAST_MAESTRO_DIR"/screenshot-❌-* 2>/dev/null | head -1)
-            [ -n "$shot" ] && echo "  Screenshot: $shot"
-            [ -f "$LAST_MAESTRO_DIR/ai-report-$name.html" ] \
-                && echo "  AI report:  $LAST_MAESTRO_DIR/ai-report-$name.html"
         fi
+        [ -n "$shot" ]      && echo "  Screenshot: $shot"
+        [ -n "$ai_report" ] && echo "  AI report:  $ai_report"
     fi
     return $rc
 }
@@ -253,7 +274,10 @@ else
             echo "  - $n"
             echo "      log:        $RESULTS_DIR/$n.maestro-dir/maestro.log"
             echo "      logcat:     $RESULTS_DIR/$n.logcat"
-            echo "      screenshot: $(ls "$RESULTS_DIR/$n.maestro-dir"/screenshot-❌-* 2>/dev/null | head -1)"
+            adir="$RESULTS_DIR/$n.artifacts-dir"
+            [ -e "$adir" ] || adir="$RESULTS_DIR/$n.maestro-dir"
+            shot=$(ls "$adir"/screenshot-❌-* 2>/dev/null | head -1)
+            [ -n "$shot" ] && echo "      screenshot: $shot"
         done
     fi
     echo ""
@@ -283,10 +307,14 @@ else
                 fi
                 echo '```'
                 echo ""
-                echo "- Maestro dir: \`$ldir\`"
+                echo "- Maestro log dir: \`$ldir\`"
                 echo "- Logcat: \`$RESULTS_DIR/$n.logcat\`"
-                shot=$(ls "$ldir"/screenshot-❌-* 2>/dev/null | head -1)
+                adir="$RESULTS_DIR/$n.artifacts-dir"
+                [ -e "$adir" ] || adir="$ldir"
+                shot=$(ls "$adir"/screenshot-❌-* 2>/dev/null | head -1)
                 [ -n "$shot" ] && echo "- Screenshot: \`$shot\`"
+                ai=$(ls "$adir"/ai-report-*.html 2>/dev/null | head -1)
+                [ -n "$ai" ] && echo "- AI report: \`$ai\`"
                 echo ""
             done
         fi
