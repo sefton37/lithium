@@ -35,7 +35,18 @@ appId: ai.talkingrock.lithium.debug
     visible:
       text: "Permissions"
     timeout: 5000
+# The Settings screen scrolls; Analysis and Data Retention sit below the
+# fold on most emulators, so scroll each into view before asserting.
+- scrollUntilVisible:
+    element:
+      text: "Analysis"
+    direction: DOWN
 - assertVisible: "Analysis"
+
+- scrollUntilVisible:
+    element:
+      text: "Data Retention"
+    direction: DOWN
 - assertVisible: "Data Retention"
 
 - scrollUntilVisible:

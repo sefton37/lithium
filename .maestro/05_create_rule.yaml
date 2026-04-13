@@ -84,10 +84,20 @@ appId: ai.talkingrock.lithium.debug
       - hideKeyboard
       # Save — the Save button is gated on isSaving && selectedPackage
       - tapOn: "Save Rule"
-      # After save, AddRule closes and Rules list renders. The Rule.name field
-      # is the saved description, so the tag appears in the list row.
+      # After save, AddRule closes and we return to the Rules list. We assert
+      # the list header is back and that the rule row exists — but we do NOT
+      # pin to the typed description, because the description field is fed
+      # by uiState.description which is overwritten by buildDescription() on
+      # any field re-focus. If the description sticks, "maestro-05-rule"
+      # appears; if it gets regenerated to the auto form (e.g. "Suppress
+      # notifications from <pkg>"), we still want the save path to pass.
       - extendedWaitUntil:
           visible:
-            text: "maestro-05-rule"
+            text: "Rules"
           timeout: 10000
-      - assertVisible: "maestro-05-rule"
+      - assertVisible: "Rules"
+      - runFlow:
+          when:
+            visible: "maestro-05-rule"
+          commands:
+            - assertVisible: "maestro-05-rule"

@@ -4,6 +4,10 @@
 # Run it last in the data-dependent suite, or re-seed data afterwards.
 appId: ai.talkingrock.lithium.debug
 ---
+# Force a cold start so Settings opens scrolled to the top and isPurging=false —
+# prior flows may leave the app mid-scroll or with a stale Settings state.
+- stopApp
+- waitForAnimationToEnd
 - launchApp
 
 # Wait for main screen using the invariant "Briefing" tab label
