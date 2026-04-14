@@ -32,7 +32,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import ai.talkingrock.lithium.data.Prefs
-import ai.talkingrock.lithium.ui.briefing.BriefingScreen
+import ai.talkingrock.lithium.ui.chat.ChatScreen
 import ai.talkingrock.lithium.ui.debug.DebugNotificationLogScreen
 import ai.talkingrock.lithium.ui.queue.QueueScreen
 import ai.talkingrock.lithium.ui.rules.AddRuleScreen
@@ -54,8 +54,8 @@ import javax.inject.Inject
  *
  * Navigation structure:
  * - Setup is shown first when permissions are missing; it pops itself on completion.
- * - Briefing is the default home route after setup.
- * - The bottom navigation bar is shown for all main tabs (Briefing, Queue, Rules, Settings).
+ * - Chat is the default home route after setup.
+ * - The bottom navigation bar is shown for all main tabs (Chat, Queue, Rules, Settings).
  *   It is hidden on the Setup screen and the debug log.
  */
 @AndroidEntryPoint
@@ -77,7 +77,7 @@ class MainActivity : ComponentActivity() {
 
         // Determine start destination:
         // - New user (never completed onboarding) → Setup
-        // - Returning user with notification access → Briefing
+        // - Returning user with notification access → Chat (home tab)
         // - Returning user who lost notification access → Setup (to re-grant)
         //
         // IMPORTANT: Use NotificationManagerCompat (synchronous system call) instead of
@@ -88,7 +88,7 @@ class MainActivity : ComponentActivity() {
             .getEnabledListenerPackages(this)
             .contains(packageName)
         val startRoute = if (onboardingDone && hasNotificationAccess) {
-            Screen.Briefing.route
+            Screen.Chat.route
         } else {
             Screen.Setup.route
         }
@@ -111,7 +111,7 @@ class MainActivity : ComponentActivity() {
 // -----------------------------------------------------------------------------------------
 
 @Composable
-private fun LithiumNavHost(startDestination: String = Screen.Setup.route) {
+private fun LithiumNavHost(startDestination: String = Screen.Chat.route) {
     val navController = rememberNavController()
     val currentBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = currentBackStackEntry?.destination?.route
@@ -134,7 +134,7 @@ private fun LithiumNavHost(startDestination: String = Screen.Setup.route) {
             composable(Screen.Setup.route) {
                 SetupScreen(
                     onSetupComplete = {
-                        navController.navigate(Screen.Briefing.route) {
+                        navController.navigate(Screen.Chat.route) {
                             // Pop the setup screen off the back stack so back
                             // does not return the user to setup after granting access.
                             popUpTo(Screen.Setup.route) { inclusive = true }
@@ -143,8 +143,8 @@ private fun LithiumNavHost(startDestination: String = Screen.Setup.route) {
                 )
             }
 
-            composable(Screen.Briefing.route) {
-                BriefingScreen()
+            composable(Screen.Chat.route) {
+                ChatScreen()
             }
 
             composable(Screen.Queue.route) {
@@ -209,7 +209,7 @@ private fun LithiumBottomBar(
                         navController.navigate(tab.route) {
                             // Avoid building up a large back stack; restore to the top of
                             // the graph when switching tabs.
-                            popUpTo(Screen.Briefing.route) {
+                            popUpTo(Screen.Chat.route) {
                                 saveState = true
                             }
                             launchSingleTop = true
@@ -243,7 +243,7 @@ private data class MainTab(
 ) {
     companion object {
         val all = listOf(
-            MainTab(Screen.Briefing.route, "Briefing",  Icons.Filled.Home),
+            MainTab(Screen.Chat.route,     "Chat",      Icons.Filled.Home),
             MainTab(Screen.Queue.route,    "Queue",     Icons.AutoMirrored.Filled.List),
             MainTab(Screen.Rules.route,    "Rules",     Icons.Filled.Star),
             MainTab(Screen.Training.route, "Train",     Icons.Filled.Favorite),
@@ -267,6 +267,7 @@ private data class MainTab(
  */
 sealed class Screen(val route: String) {
     object Setup    : Screen("setup")
+    object Chat     : Screen("chat")
     object Briefing : Screen("briefing")
     object Queue    : Screen("queue")
     object Rules    : Screen("rules")

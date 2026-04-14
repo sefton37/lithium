@@ -3,6 +3,7 @@ package ai.talkingrock.lithium.ai
 import android.util.Log
 import ai.talkingrock.lithium.data.repository.NotificationRepository
 import kotlinx.serialization.json.Json
+import javax.inject.Inject
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
@@ -37,7 +38,7 @@ import kotlinx.serialization.json.jsonPrimitive
  * > "I'm not sure how to answer that from your notification data. Try asking about
  * > counts, recent notifications, or which apps sent the most."
  */
-class ChatToolDispatcher(
+class ChatToolDispatcher @Inject constructor(
     private val repo: NotificationRepository,
 ) {
 

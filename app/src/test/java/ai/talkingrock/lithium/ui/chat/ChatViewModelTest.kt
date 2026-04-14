@@ -1,8 +1,10 @@
 package ai.talkingrock.lithium.ui.chat
 
 import ai.talkingrock.lithium.ai.BriefingService
+import ai.talkingrock.lithium.ai.ChatToolDispatcher
 import ai.talkingrock.lithium.ai.LlamaEngine
 import ai.talkingrock.lithium.ai.RuleExtractor
+import ai.talkingrock.lithium.ai.ToolResult
 import ai.talkingrock.lithium.data.model.Report
 import ai.talkingrock.lithium.data.model.Rule
 import ai.talkingrock.lithium.data.repository.RuleRepository
@@ -30,6 +32,7 @@ class ChatViewModelTest {
     private lateinit var extractor: RuleExtractor
     private lateinit var ruleRepo: RuleRepository
     private lateinit var llama: LlamaEngine
+    private lateinit var dispatcher: ChatToolDispatcher
     private lateinit var vm: ChatViewModel
 
     @Before fun setUp() {
@@ -37,8 +40,9 @@ class ChatViewModelTest {
         extractor = mockk()
         ruleRepo = mockk()
         llama = mockk(relaxed = true)
+        dispatcher = mockk()
         every { llama.isModelLoaded() } returns true
-        vm = ChatViewModel(briefingService, extractor, ruleRepo, llama, modelDir = "/tmp/models")
+        vm = ChatViewModel(briefingService, extractor, ruleRepo, llama, dispatcher, modelDir = "/tmp/models")
     }
 
     @Test fun `invokeBriefing appends BriefingResult`() = runTest {
@@ -117,5 +121,44 @@ class ChatViewModelTest {
         advanceUntilIdle()
 
         coVerify { extractor.refine(any(), eq("only work hours"), any()) }
+    }
+
+    /** DOD-25: full VM round-trip with mocked dispatcher; state.messages contains AssistantAnswer. */
+    @Test fun `qaAnswerAppendedAfterToolDispatch`() = runTest {
+        coEvery { dispatcher.dispatch(any()) } returns ToolResult.Count(42)
+        coEvery { llama.generate(any(), maxTokens = 32) } returns "TOOL: notificationCount\nARGS: {}"
+        coEvery { llama.generate(any(), maxTokens = 256) } returns "You have 42 notifications."
+
+        vm.submitQaInput("How many notifications do I have?")
+        advanceUntilIdle()
+
+        val msgs = vm.state.value.messages
+        assertTrue("Expected AssistantAnswer in messages", msgs.any { it is ChatMessage.AssistantAnswer })
+    }
+
+    @Test fun `qaThinkingStateClearedAfterAnswer`() = runTest {
+        coEvery { dispatcher.dispatch(any()) } returns ToolResult.Count(7)
+        coEvery { llama.generate(any(), maxTokens = 32) } returns "TOOL: notificationCount\nARGS: {}"
+        coEvery { llama.generate(any(), maxTokens = 256) } returns "You have 7 notifications."
+
+        vm.submitQaInput("How many?")
+        advanceUntilIdle()
+
+        assertEquals(false, vm.state.value.isQaThinking)
+    }
+
+    @Test fun `noToolCallProducesRefusalMessage`() = runTest {
+        coEvery { dispatcher.dispatch(any()) } returns ToolResult.NoToolCall
+        coEvery { llama.generate(any(), maxTokens = 32) } returns "I am not sure."
+
+        vm.submitQaInput("What is the meaning of life?")
+        advanceUntilIdle()
+
+        val msgs = vm.state.value.messages
+        val answer = msgs.filterIsInstance<ChatMessage.AssistantAnswer>().last()
+        assertTrue(
+            "Refusal text expected",
+            answer.text.contains("not sure", ignoreCase = true)
+        )
     }
 }

@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -74,8 +75,10 @@ fun ChatScreen(
         ) {
             ToolLauncher(
                 isBriefingRunning = state.isBriefingRunning,
+                isQaThinking = state.isQaThinking,
                 onInvokeBriefing = viewModel::invokeBriefing,
                 onStartRuleTool = viewModel::startRuleCreationTool,
+                onStartQa = viewModel::startQaMode,
             )
             HorizontalDivider()
 
@@ -101,13 +104,25 @@ fun ChatScreen(
                 }
             }
 
-            if (state.activeTool == ChatTool.RULE_CREATION) {
+            // Input bar is visible for RULE_CREATION and Q&A modes (DOD-18).
+            // In Q&A mode, submitQaInput is called directly with the current draft.
+            if (state.activeTool == ChatTool.RULE_CREATION || state.activeTool == ChatTool.QA) {
+                val isQaMode = state.activeTool == ChatTool.QA
                 HorizontalDivider()
                 ChatInputBar(
                     value = state.inputDraft,
                     onValueChange = viewModel::updateInputDraft,
-                    onSend = viewModel::submitInput,
-                    enabled = !state.isExtracting,
+                    onSend = {
+                        if (isQaMode) {
+                            viewModel.submitQaInput(state.inputDraft)
+                            viewModel.updateInputDraft("")
+                        } else {
+                            viewModel.submitInput()
+                        }
+                    },
+                    enabled = if (isQaMode) !state.isQaThinking else !state.isExtracting,
+                    placeholder = if (isQaMode) "Ask about your notification history…"
+                                  else "Describe or refine the rule…",
                 )
             }
         }
@@ -121,8 +136,10 @@ fun ChatScreen(
 @Composable
 private fun ToolLauncher(
     isBriefingRunning: Boolean,
+    isQaThinking: Boolean,
     onInvokeBriefing: () -> Unit,
     onStartRuleTool: () -> Unit,
+    onStartQa: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -145,6 +162,15 @@ private fun ToolLauncher(
             sublabel = "From a description",
             enabled = true,
             onClick = onStartRuleTool,
+        )
+        // Q&A tool card — always visible; input bar shown in ChatTool.QA mode (DOD-18).
+        ToolCard(
+            modifier = Modifier.weight(1f),
+            icon = Icons.Filled.Search,
+            label = "Ask",
+            sublabel = if (isQaThinking) "Thinking…" else "Ask anything",
+            enabled = !isQaThinking,
+            onClick = onStartQa,
         )
     }
 }
@@ -188,6 +214,8 @@ private fun ChatMessageItem(
         is ChatMessage.BriefingResult -> BriefingCard(msg)
         is ChatMessage.RuleExtractionProgress -> ProgressRow(msg)
         is ChatMessage.RuleDraft -> RuleDraftCard(msg.draft, onFieldEdit, onApprove, onCancel)
+        // Q&A assistant answer — rendered as a left-aligned assistant bubble.
+        is ChatMessage.AssistantAnswer -> AssistantAnswerBubble(msg.text)
     }
 }
 
@@ -196,6 +224,18 @@ private fun UserBubble(text: String) {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
         Card(
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+        ) {
+            Text(text, modifier = Modifier.padding(10.dp))
+        }
+    }
+}
+
+/** Left-aligned card for natural-language answers from the Q&A tool-calling loop. */
+@Composable
+private fun AssistantAnswerBubble(text: String) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
+        Card(
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
         ) {
             Text(text, modifier = Modifier.padding(10.dp))
         }
@@ -383,6 +423,7 @@ private fun ChatInputBar(
     onValueChange: (String) -> Unit,
     onSend: () -> Unit,
     enabled: Boolean,
+    placeholder: String = "Describe or refine the rule…",
 ) {
     Row(
         modifier = Modifier
@@ -394,7 +435,7 @@ private fun ChatInputBar(
             value = value,
             onValueChange = onValueChange,
             modifier = Modifier.weight(1f),
-            placeholder = { Text("Describe or refine the rule…") },
+            placeholder = { Text(placeholder) },
             enabled = enabled,
             maxLines = 4,
         )

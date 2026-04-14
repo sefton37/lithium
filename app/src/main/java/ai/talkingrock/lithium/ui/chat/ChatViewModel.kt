@@ -4,8 +4,10 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import ai.talkingrock.lithium.ai.BriefingService
+import ai.talkingrock.lithium.ai.ChatToolDispatcher
 import ai.talkingrock.lithium.ai.LlamaEngine
 import ai.talkingrock.lithium.ai.RuleExtractor
+import ai.talkingrock.lithium.ai.ToolResult
 import ai.talkingrock.lithium.data.model.Rule
 import ai.talkingrock.lithium.data.model.RuleCondition
 import ai.talkingrock.lithium.data.repository.RuleRepository
@@ -39,6 +41,7 @@ class ChatViewModel @Inject constructor(
     private val ruleExtractor: RuleExtractor,
     private val ruleRepository: RuleRepository,
     private val llamaEngine: LlamaEngine,
+    private val chatToolDispatcher: ChatToolDispatcher,
     @Named("modelDir") private val modelDir: String,
 ) : ViewModel() {
 
@@ -95,6 +98,58 @@ class ChatViewModel @Inject constructor(
                 timestampMs = System.currentTimeMillis(),
             )
         )
+    }
+
+    /**
+     * Invoked by the Ask / Q&A tool card. Switches the chat into Q&A mode and
+     * shows the input bar so the user can type a question.
+     */
+    fun startQaMode() {
+        _state.update { it.copy(activeTool = ChatTool.QA) }
+        appendMessage(
+            ChatMessage.SystemMessage(
+                text = "Ask me anything about your notification history.",
+                timestampMs = System.currentTimeMillis(),
+            )
+        )
+    }
+
+    /**
+     * Runs the two-pass Q&A tool-calling loop for [question].
+     *
+     * Pass 1: asks the model to select a tool → [ChatToolDispatcher.dispatch].
+     * Pass 2: feeds the tool result back to the model → natural-language answer.
+     * If the dispatcher returns [ToolResult.Unknown] or [ToolResult.NoToolCall],
+     * the canonical [ChatToolDispatcher.REFUSAL_TEXT] is appended instead.
+     */
+    fun submitQaInput(question: String) {
+        val trimmed = question.trim()
+        if (trimmed.isBlank()) return
+        appendMessage(ChatMessage.UserText(trimmed, System.currentTimeMillis()))
+        _state.update { it.copy(isQaThinking = true) }
+        viewModelScope.launch {
+            ensureGenerativeModel()
+            try {
+                val pass1Output = llamaEngine.generate(buildPass1Prompt(trimmed), maxTokens = 32)
+                val toolResult = chatToolDispatcher.dispatch(pass1Output)
+                val answerText = when (toolResult) {
+                    is ToolResult.Unknown, is ToolResult.NoToolCall -> ChatToolDispatcher.REFUSAL_TEXT
+                    else -> {
+                        val pass2Output = llamaEngine.generate(
+                            buildPass2Prompt(trimmed, toolResult),
+                            maxTokens = 256,
+                        )
+                        pass2Output.trim().ifBlank { ChatToolDispatcher.REFUSAL_TEXT }
+                    }
+                }
+                appendQaAnswer(answerText)
+            } catch (e: Exception) {
+                Log.e(TAG, "submitQaInput: failed", e)
+                appendQaAnswer(ChatToolDispatcher.REFUSAL_TEXT)
+            } finally {
+                _state.update { it.copy(isQaThinking = false) }
+            }
+        }
     }
 
     /**
@@ -265,6 +320,37 @@ class ChatViewModel @Inject constructor(
                 ui.copy(messages = next)
             }
         }
+    }
+
+    /** Appends an [ChatMessage.AssistantAnswer] with [text] to the message thread. */
+    private fun appendQaAnswer(text: String) {
+        appendMessage(ChatMessage.AssistantAnswer(text = text, timestampMs = System.currentTimeMillis()))
+    }
+
+    /**
+     * Builds the Pass-1 prompt: system tool-listing prompt + user question.
+     * The model must reply with a TOOL: / ARGS: block.
+     */
+    private fun buildPass1Prompt(question: String): String = buildString {
+        appendLine(ChatToolDispatcher.QA_SYSTEM_PROMPT)
+        appendLine()
+        appendLine("[USER] $question")
+        appendLine("[ASSISTANT]")
+    }
+
+    /**
+     * Builds the Pass-2 prompt: system prompt + user question + tool result.
+     * The model must reply with a natural-language answer only (no TOOL: line).
+     *
+     * TODO(v2): include recent conversation turns for multi-turn support.
+     */
+    private fun buildPass2Prompt(question: String, result: ToolResult): String = buildString {
+        appendLine(ChatToolDispatcher.QA_SYSTEM_PROMPT)
+        appendLine()
+        appendLine("[USER] $question")
+        appendLine("[RESULT]")
+        appendLine(result.toPromptString())
+        appendLine("[ASSISTANT] Answer in natural language:")
     }
 
     private fun ensureGenerativeModel() {

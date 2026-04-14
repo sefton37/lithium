@@ -8,7 +8,7 @@ package ai.talkingrock.lithium.ui.chat
  * multi-turn exchange: initial NL description → per-field LLM extraction → user
  * review → optional refinement follow-ups → approval and persistence.
  */
-enum class ChatTool { BRIEFING, RULE_CREATION }
+enum class ChatTool { BRIEFING, RULE_CREATION, QA }
 
 /**
  * Field identifiers used for tracking which draft fields the user has manually
@@ -81,6 +81,16 @@ sealed class ChatMessage {
         val draft: RuleDraftState,
         override val timestampMs: Long,
     ) : ChatMessage()
+
+    /**
+     * Natural-language answer produced by the Q&A two-pass tool-calling loop.
+     * The answer text is the Pass-2 model output after the tool result was injected.
+     * If no valid tool call was made, the text contains the canonical [ChatToolDispatcher.REFUSAL_TEXT].
+     */
+    data class AssistantAnswer(
+        val text: String,
+        override val timestampMs: Long,
+    ) : ChatMessage()
 }
 
 data class ChatUiState(
@@ -88,5 +98,6 @@ data class ChatUiState(
     val inputDraft: String = "",
     val isExtracting: Boolean = false,
     val isBriefingRunning: Boolean = false,
+    val isQaThinking: Boolean = false,
     val activeTool: ChatTool? = null,
 )
