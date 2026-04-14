@@ -182,11 +182,14 @@ class LlamaEngine @Inject constructor() {
             Log.w(TAG, "generate: model not loaded")
             return ""
         }
-        return try {
-            LlamaCpp.runInference(modelHandle, prompt, maxTokens)
-        } catch (e: Exception) {
-            Log.e(TAG, "generate: inference failed", e)
-            ""
+        // Mutex ensures llama.cpp context is not accessed concurrently (mirrors classify())
+        return inferenceMutex.withLock {
+            try {
+                LlamaCpp.runInference(modelHandle, prompt, maxTokens)
+            } catch (e: Exception) {
+                Log.e(TAG, "generate: inference failed", e)
+                ""
+            }
         }
     }
 

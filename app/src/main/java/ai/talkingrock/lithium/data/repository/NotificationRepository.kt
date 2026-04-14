@@ -1,5 +1,6 @@
 package ai.talkingrock.lithium.data.repository
 
+import ai.talkingrock.lithium.data.db.AppCount
 import ai.talkingrock.lithium.data.db.NotificationDao
 import ai.talkingrock.lithium.data.db.TierCount
 import ai.talkingrock.lithium.data.model.NotificationRecord
@@ -79,4 +80,37 @@ class NotificationRepository @Inject constructor(
     suspend fun deleteAll() = withContext(Dispatchers.IO) {
         dao.deleteAll()
     }
+
+    /**
+     * One-shot query for all notifications since [sinceMs].
+     * Used by [ai.talkingrock.lithium.ai.ChatQueryTools.NotificationsSince].
+     */
+    suspend fun getAllSince(sinceMs: Long): List<NotificationRecord> = withContext(Dispatchers.IO) {
+        dao.getAllSince(sinceMs)
+    }
+
+    /**
+     * Returns tier breakdown counts across all notifications.
+     * Used by [ai.talkingrock.lithium.ai.ChatQueryTools.TierBreakdown].
+     */
+    suspend fun getTierBreakdown(): List<TierCount> = withContext(Dispatchers.IO) {
+        dao.getTierBreakdown()
+    }
+
+    /**
+     * Returns the top [limit] apps by notification count.
+     * Used by [ai.talkingrock.lithium.ai.ChatQueryTools.TopApps].
+     */
+    suspend fun getTopAppsByCount(limit: Int): List<AppCount> = withContext(Dispatchers.IO) {
+        dao.getTopAppsByCount(limit)
+    }
+
+    /**
+     * Suspend (non-Flow) variant of [getByPackage] for Q&A tool calls.
+     * Returns up to [limit] notifications from [packageName], newest first.
+     */
+    suspend fun getByPackageSuspend(packageName: String, limit: Int): List<NotificationRecord> =
+        withContext(Dispatchers.IO) {
+            dao.getByPackageSuspend(packageName, limit)
+        }
 }

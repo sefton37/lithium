@@ -16,6 +16,12 @@ import kotlinx.coroutines.flow.Flow
 /** Projection used by [NotificationDao.getTierBreakdown]. */
 data class TierCount(val tier: Int, val count: Int)
 
+/** Projection used by [NotificationDao.getTopAppsByCount] for Q&A tool surface. */
+data class AppCount(
+    @androidx.room.ColumnInfo(name = "package_name") val packageName: String,
+    val count: Int
+)
+
 /**
  * Pattern-coverage projection. Each row represents one notification "pattern"
  * in plain language — e.g., "Messages · sms_unknown" — with how many rows in
@@ -251,4 +257,18 @@ interface NotificationDao {
         "ORDER BY count DESC"
     )
     suspend fun getTierReasonStats(sinceMs: Long, maxTier: Int, minCount: Int): List<TierReasonStat>
+
+    /**
+     * Returns the top [limit] apps by notification count, descending.
+     * Used by the Q&A tool surface (ChatQueryTools.TopApps).
+     */
+    @Query("SELECT package_name, COUNT(*) AS count FROM notifications GROUP BY package_name ORDER BY count DESC LIMIT :limit")
+    suspend fun getTopAppsByCount(limit: Int): List<AppCount>
+
+    /**
+     * Suspend (non-Flow) variant of [getByPackage] for use in Q&A tool calls.
+     * Returns up to [limit] notifications for the given package, newest first.
+     */
+    @Query("SELECT * FROM notifications WHERE package_name = :packageName ORDER BY posted_at_ms DESC LIMIT :limit")
+    suspend fun getByPackageSuspend(packageName: String, limit: Int): List<NotificationRecord>
 }

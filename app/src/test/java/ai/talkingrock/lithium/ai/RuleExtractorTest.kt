@@ -67,6 +67,8 @@ class RuleExtractorTest {
         coEvery { engine.generate(match { it.contains("channel") }, any()) } returns "unknown"
         coEvery { engine.generate(match { it.contains("category") }, any()) } returns "unknown"
         coEvery { engine.generate(match { it.contains("contact") }, any()) } returns "no"
+        // keyword extraction was added after this test was written; return empty to skip keyword filter
+        coEvery { engine.generate(match { it.contains("keyword") }, any()) } returns "unknown"
         coEvery { engine.generate(match { it.contains("action") }, any()) } returns "I think queue"
         val result = extractor.extract("hold these for later")
         assertEquals("queue", result.action)
