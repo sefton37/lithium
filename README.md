@@ -335,3 +335,5 @@ disruption that disproportionately impacts neurodivergent users.
 
 - **Talking Rock:** talkingrock.ai
 - **Author:** Kel Brengel
+
+<!-- spec-3 dod-10 verification marker -->
