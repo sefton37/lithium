@@ -21,5 +21,12 @@
                 <action android:name="ai.talkingrock.lithium.DUMP_IMPLICIT" />
             </intent-filter>
         </receiver>
+        <receiver
+            android:name="ai.talkingrock.lithium.debug.DbExportReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="ai.talkingrock.lithium.debug.EXPORT_NOTIFICATIONS_PLAINTEXT" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>
