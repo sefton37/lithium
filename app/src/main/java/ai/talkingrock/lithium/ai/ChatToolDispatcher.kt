@@ -1,6 +1,7 @@
 package ai.talkingrock.lithium.ai
 
 import android.util.Log
+import ai.talkingrock.lithium.ai.GeneratedQaContract
 import ai.talkingrock.lithium.data.repository.NotificationRepository
 import kotlinx.serialization.json.Json
 import javax.inject.Inject
@@ -133,32 +134,11 @@ class ChatToolDispatcher @Inject constructor(
             "I'm not sure how to answer that from your notification data. " +
             "Try asking about counts, recent notifications, or which apps sent the most."
 
-        /** System prompt for Pass 1 (tool selection). Shared constant for prompt construction. */
-        const val QA_SYSTEM_PROMPT = """[SYSTEM] You are Lithium, a notification assistant. You answer questions about the user's notification history by calling exactly one tool. Available tools:
-
-TOOL: notificationCount
-ARGS: {}
--> Returns the total number of notifications recorded.
-
-TOOL: notificationsSince
-ARGS: {"hours": N}
--> Returns notifications from the last N hours. N must be an integer (1-168).
-
-TOOL: tierBreakdown
-ARGS: {}
--> Returns a count per tier: 0=invisible, 1=noise, 2=worth seeing, 3=interrupt.
-
-TOOL: topApps
-ARGS: {"limit": N}
--> Returns the top N apps by notification count. N must be an integer (1-20).
-
-TOOL: notificationsByApp
-ARGS: {"packageName": "com.example"}
--> Returns recent notifications from one specific app.
-
-Rules:
-- Respond with exactly one TOOL: line followed by one ARGS: line.
-- Do not explain. Do not add any other text before the TOOL: line.
-- If no tool fits the question, write: TOOL: none"""
+        /**
+         * System prompt for Pass 1 (tool selection).
+         * Source of truth: app/src/main/assets/lithium_qa_contract.json
+         * Generated constant: [GeneratedQaContract.QA_SYSTEM_PROMPT]
+         */
+        const val QA_SYSTEM_PROMPT: String = GeneratedQaContract.QA_SYSTEM_PROMPT
     }
 }
