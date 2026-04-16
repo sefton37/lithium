@@ -45,6 +45,7 @@ import ai.talkingrock.lithium.data.model.TrainingJudgment
  * - 10: Channel rankings — added `channel_rankings` table.
  * - 11: Implicit judgments — added `implicit_judgments` table.
  * - 12: Score quantiles — added `score_quantiles` table.
+ * - 13: Channel display-name cache — added `notification_channels` table.
  */
 @Database(
     entities = [
@@ -63,7 +64,7 @@ import ai.talkingrock.lithium.data.model.TrainingJudgment
         NotificationChannel::class,
         ScoreQuantiles::class,
     ],
-    version = 12,
+    version = 13,
     exportSchema = true
 )
 abstract class LithiumDatabase : RoomDatabase() {

@@ -311,6 +311,24 @@ object DatabaseModule {
     }
 
     /**
+     * Migration 12 to 13: adds notification_channels display-name cache.
+     * Recovers from schema drift in commit 15c3388 which mutated v12 in place
+     * instead of bumping the version.
+     */
+    val MIGRATION_12_13 = object : Migration(12, 13) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS notification_channels (" +
+                "package_name TEXT NOT NULL," +
+                "channel_id TEXT NOT NULL," +
+                "display_name TEXT," +
+                "last_seen_ms INTEGER NOT NULL," +
+                "PRIMARY KEY(package_name, channel_id))"
+            )
+        }
+    }
+
+    /**
      * Fixed 32-byte plaintext that the Keystore key encrypts to produce the passphrase.
      * This is NOT a secret — the security comes from the Keystore key, not this value.
      * Changing this constant will make the existing database unreadable.
@@ -399,7 +417,8 @@ object DatabaseModule {
             .addMigrations(
                 MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4,
                 MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8,
-                MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12
+                MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12,
+                MIGRATION_12_13
             )
             // No fallback destructive migration — force explicit migrations.
             // If a migration is missing, the app crashes loudly rather than

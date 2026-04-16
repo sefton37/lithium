@@ -1,8 +1,8 @@
 {
   "formatVersion": 1,
   "database": {
-    "version": 12,
-    "identityHash": "57be1cde7a591f30581afa427d9a525d",
+    "version": 13,
+    "identityHash": "b4ab576e2f892c752fbbe2ef6ec23d2b",
     "entities": [
       {
         "tableName": "notifications",
@@ -953,6 +953,45 @@
         "foreignKeys": []
       },
       {
+        "tableName": "notification_channels",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`package_name` TEXT NOT NULL, `channel_id` TEXT NOT NULL, `display_name` TEXT, `last_seen_ms` INTEGER NOT NULL, PRIMARY KEY(`package_name`, `channel_id`))",
+        "fields": [
+          {
+            "fieldPath": "packageName",
+            "columnName": "package_name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "channelId",
+            "columnName": "channel_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "displayName",
+            "columnName": "display_name",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "lastSeenMs",
+            "columnName": "last_seen_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "package_name",
+            "channel_id"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
         "tableName": "score_quantiles",
         "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER NOT NULL, `window_days` INTEGER NOT NULL, `q20` REAL NOT NULL, `q60` REAL NOT NULL, `q90` REAL NOT NULL, `computed_at_ms` INTEGER NOT NULL, `sample_size` INTEGER NOT NULL, PRIMARY KEY(`id`))",
         "fields": [
@@ -1012,7 +1051,7 @@
     "views": [],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '57be1cde7a591f30581afa427d9a525d')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'b4ab576e2f892c752fbbe2ef6ec23d2b')"
     ]
   }
 }
