@@ -32,6 +32,15 @@ appId: ai.talkingrock.lithium.debug
 - assertVisible: "Notification Access"
 - assertVisible: "Usage Access"
 
+# --- Data Retention Section ---
+# Data Retention appears in the screen BEFORE Analysis, so scroll to it first.
+- scrollUntilVisible:
+    element:
+      text: "Data Retention"
+    direction: DOWN
+    centerElement: true
+- assertVisible: "Data Retention"
+
 # --- Analysis Section ---
 - scrollUntilVisible:
     element:
@@ -67,14 +76,6 @@ appId: ai.talkingrock.lithium.debug
     direction: DOWN
     centerElement: true
 - assertVisible: "Run Analysis Now"
-
-# --- Data Retention Section ---
-- scrollUntilVisible:
-    element:
-      text: "Data Retention"
-    direction: DOWN
-    centerElement: true
-- assertVisible: "Data Retention"
 
 # --- Purge Section ---
 - scrollUntilVisible:
