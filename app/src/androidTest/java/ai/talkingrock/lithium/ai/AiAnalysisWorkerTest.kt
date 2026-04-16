@@ -10,6 +10,7 @@ import androidx.work.ListenableWorker
 import androidx.work.WorkerFactory
 import androidx.work.WorkerParameters
 import androidx.work.testing.TestListenableWorkerBuilder
+import ai.talkingrock.lithium.ai.scoring.ScoringRefit
 import ai.talkingrock.lithium.data.Prefs
 import ai.talkingrock.lithium.data.db.LithiumDatabase
 import ai.talkingrock.lithium.data.db.NotificationDao
@@ -58,6 +59,7 @@ class AiAnalysisWorkerTest {
     private lateinit var suggestionGenerator: SuggestionGenerator
     private lateinit var reportRepository: ReportRepository
     private lateinit var behaviorProfileRepository: BehaviorProfileRepository
+    private lateinit var scoringRefit: ScoringRefit
     private lateinit var sharedPreferences: SharedPreferences
 
     @Before
@@ -76,6 +78,7 @@ class AiAnalysisWorkerTest {
         suggestionGenerator = mockk(relaxed = true)
         reportRepository = mockk(relaxed = true)
         behaviorProfileRepository = mockk(relaxed = true)
+        scoringRefit = mockk(relaxed = true)
         sharedPreferences = mockk(relaxed = true)
 
         // Defaults: models do NOT load (heuristic path)
@@ -127,6 +130,7 @@ class AiAnalysisWorkerTest {
                 suggestionGenerator = suggestionGenerator,
                 reportRepository = reportRepository,
                 behaviorProfileRepository = behaviorProfileRepository,
+                scoringRefit = scoringRefit,
                 sharedPreferences = sharedPreferences,
                 modelDir = "/dev/null",
             ))
@@ -432,6 +436,7 @@ class AiAnalysisWorkerFactory(
     private val suggestionGenerator: SuggestionGenerator,
     private val reportRepository: ReportRepository,
     private val behaviorProfileRepository: BehaviorProfileRepository,
+    private val scoringRefit: ScoringRefit,
     private val sharedPreferences: SharedPreferences,
     private val modelDir: String,
 ) : WorkerFactory() {
@@ -454,6 +459,7 @@ class AiAnalysisWorkerFactory(
                 suggestionGenerator = suggestionGenerator,
                 reportRepository = reportRepository,
                 behaviorProfileRepository = behaviorProfileRepository,
+                scoringRefit = scoringRefit,
                 sharedPreferences = sharedPreferences,
                 modelDir = modelDir,
             )
