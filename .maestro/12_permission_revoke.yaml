@@ -9,7 +9,7 @@ appId: ai.talkingrock.lithium.debug
 # Verify app is functional
 - extendedWaitUntil:
     visible:
-      text: "Briefing"
+      text: "Chat"
     timeout: 30000
 
 # Navigate to each tab
@@ -33,7 +33,7 @@ appId: ai.talkingrock.lithium.debug
 - launchApp
 - extendedWaitUntil:
     visible:
-      text: "Briefing"
+      text: "Chat"
     timeout: 30000
 
 # All tabs should still work
@@ -49,5 +49,5 @@ appId: ai.talkingrock.lithium.debug
 - tapOn: "Chat"
 - extendedWaitUntil:
     visible:
-      text: "Briefing"
+      text: "Chat"
     timeout: 5000

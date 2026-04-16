@@ -7,7 +7,7 @@
 #
 # Data dependency: suggestions require analysis to have run. If no suggestion exists
 # (fresh install, or no data yet), this flow verifies the briefing tab invariants:
-# "Briefing" header is visible and navigation works.
+# "Chat" header is visible and navigation works.
 #
 # Design: This flow does NOT use conditional branching — it asserts the briefing structure
 # is correct and attempts to tap "Yes, try it" with an extended wait that fails gracefully
@@ -21,14 +21,14 @@ appId: ai.talkingrock.lithium.debug
 # Wait for main screen
 - extendedWaitUntil:
     visible:
-      text: "Briefing"
+      text: "Chat"
     timeout: 30000
 
 # Tap Briefing tab to ensure correct state
 - tapOn: "Chat"
 - extendedWaitUntil:
     visible:
-      text: "Briefing"
+      text: "Chat"
     timeout: 5000
 
 # The briefing tab bar is always intact regardless of data state
@@ -43,7 +43,7 @@ appId: ai.talkingrock.lithium.debug
 # Either is valid — we check both paths via the navigation invariant below.
 - extendedWaitUntil:
     visible:
-      text: "Briefing"
+      text: "Chat"
     timeout: 3000
 
 # If "Suggestions" section is present (from analysis run in flow 07),
@@ -58,7 +58,7 @@ appId: ai.talkingrock.lithium.debug
       - waitForAnimationToEnd
       - extendedWaitUntil:
           visible:
-            text: "Briefing"
+            text: "Chat"
           timeout: 5000
 
 # Navigate to Rules tab to verify the approved rule appears (or rules are empty if no suggestion)
@@ -75,5 +75,5 @@ appId: ai.talkingrock.lithium.debug
 - tapOn: "Chat"
 - extendedWaitUntil:
     visible:
-      text: "Briefing"
+      text: "Chat"
     timeout: 5000

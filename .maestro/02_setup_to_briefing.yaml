@@ -10,11 +10,11 @@ appId: ai.talkingrock.lithium.debug
 # Wait for the Briefing tab label which is always present in the bottom nav.
 - extendedWaitUntil:
     visible:
-      text: "Briefing"
+      text: "Chat"
     timeout: 30000
 
 # Bottom navigation tabs must all be visible
-- assertVisible: "Briefing"
+- assertVisible: "Chat"
 - assertVisible: "Queue"
 - assertVisible: "Rules"
 - assertVisible: "Settings"

@@ -25,9 +25,9 @@ appId: ai.talkingrock.lithium.debug
 # short-circuit and skip the pager walk.
 - runFlow:
     when:
-      visible: "Briefing"
+      visible: "Chat"
     commands:
-      - assertVisible: "Briefing"
+      - assertVisible: "Chat"
 
 # Otherwise, we're on the Welcome page — walk the pager.
 # Pages 1-6 each expose exactly one navigation button ("Next" or "Skip");
@@ -35,7 +35,7 @@ appId: ai.talkingrock.lithium.debug
 # which guarantees exactly one advance per page regardless of permission state.
 - runFlow:
     when:
-      notVisible: "Briefing"
+      notVisible: "Chat"
     commands:
       # Page 0: Title
       - extendedWaitUntil:
@@ -119,6 +119,6 @@ appId: ai.talkingrock.lithium.debug
 # After completion, the app should route to Briefing.
 - extendedWaitUntil:
     visible:
-      text: "Briefing"
+      text: "Chat"
     timeout: 30000
-- assertVisible: "Briefing"
+- assertVisible: "Chat"

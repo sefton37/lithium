@@ -9,11 +9,11 @@ appId: ai.talkingrock.lithium.debug
 # Wait for main screen
 - extendedWaitUntil:
     visible:
-      text: "Briefing"
+      text: "Chat"
     timeout: 30000
 
 # Bottom nav is always visible
-- assertVisible: "Briefing"
+- assertVisible: "Chat"
 - assertVisible: "Queue"
 - assertVisible: "Rules"
 - assertVisible: "Settings"

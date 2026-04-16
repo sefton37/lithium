@@ -10,7 +10,7 @@ appId: ai.talkingrock.lithium.debug
 # Wait for main screen
 - extendedWaitUntil:
     visible:
-      text: "Briefing"
+      text: "Chat"
     timeout: 30000
 
 # --- Queue tab ---
@@ -69,5 +69,5 @@ appId: ai.talkingrock.lithium.debug
 - tapOn: "Chat"
 - extendedWaitUntil:
     visible:
-      text: "Briefing"
+      text: "Chat"
     timeout: 5000

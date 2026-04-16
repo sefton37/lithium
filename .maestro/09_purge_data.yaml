@@ -10,10 +10,10 @@ appId: ai.talkingrock.lithium.debug
 - waitForAnimationToEnd
 - launchApp
 
-# Wait for main screen using the invariant "Briefing" tab label
+# Wait for main screen using the invariant "Chat" tab label
 - extendedWaitUntil:
     visible:
-      text: "Briefing"
+      text: "Chat"
     timeout: 30000
 
 # Navigate to Settings
@@ -63,9 +63,9 @@ appId: ai.talkingrock.lithium.debug
 - tapOn: "Chat"
 - extendedWaitUntil:
     visible:
-      text: "Briefing"
+      text: "Chat"
     timeout: 5000
 # After purge, the briefing may show "No new report." (report cleared) or
 # "Lithium is learning" (data-readiness state also reset). Both are valid.
-# The invariant — the "Briefing" tab label being visible — is sufficient.
+# The invariant — the "Chat" tab label being visible — is sufficient.
 # We already confirmed it above, so no further assertion is needed here.

@@ -14,7 +14,7 @@ appId: ai.talkingrock.lithium.debug
 # Wait for main screen (Briefing tab is default)
 - extendedWaitUntil:
     visible:
-      text: "Briefing"
+      text: "Chat"
     timeout: 30000
 
 # Navigate to the Training tab (labeled "Train" in the bottom nav)
@@ -36,5 +36,5 @@ appId: ai.talkingrock.lithium.debug
 - tapOn: "Chat"
 - extendedWaitUntil:
     visible:
-      text: "Briefing"
+      text: "Chat"
     timeout: 5000

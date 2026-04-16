@@ -6,10 +6,10 @@ appId: ai.talkingrock.lithium.debug
 - waitForAnimationToEnd
 - launchApp
 
-# Wait for main screen using the invariant "Briefing" tab label
+# Wait for main screen using the invariant "Chat" tab label
 - extendedWaitUntil:
     visible:
-      text: "Briefing"
+      text: "Chat"
     timeout: 30000
 
 # Rapid tab switching — 3 rounds
@@ -26,7 +26,7 @@ appId: ai.talkingrock.lithium.debug
       - waitForAnimationToEnd
 
 # App should still be alive — Briefing tab is always visible
-- assertVisible: "Briefing"
+- assertVisible: "Chat"
 
 # Open add rule and back — verify navigation stack integrity
 - tapOn: "Rules"
@@ -58,5 +58,5 @@ appId: ai.talkingrock.lithium.debug
 - tapOn: "Chat"
 - extendedWaitUntil:
     visible:
-      text: "Briefing"
+      text: "Chat"
     timeout: 5000

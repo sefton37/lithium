@@ -17,7 +17,7 @@ appId: ai.talkingrock.lithium.debug
 # other installed apps) can delay the first frame past 15s on busy devices.
 - extendedWaitUntil:
     visible:
-      text: "Briefing"
+      text: "Chat"
     timeout: 30000
 
 # Navigate to Rules

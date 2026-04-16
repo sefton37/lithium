@@ -15,7 +15,7 @@ appId: ai.talkingrock.lithium.debug
 # llama.cpp inference; the device can be CPU-saturated on cold launch.
 - extendedWaitUntil:
     visible:
-      text: "Briefing"
+      text: "Chat"
     timeout: 30000
 
 # Navigate to the Queue tab
@@ -48,5 +48,5 @@ appId: ai.talkingrock.lithium.debug
 - tapOn: "Chat"
 - extendedWaitUntil:
     visible:
-      text: "Briefing"
+      text: "Chat"
     timeout: 5000

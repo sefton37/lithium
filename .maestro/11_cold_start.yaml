@@ -10,7 +10,7 @@ appId: ai.talkingrock.lithium.debug
 # Should reach a usable screen without crashing
 - extendedWaitUntil:
     visible:
-      text: "Briefing"
+      text: "Chat"
     timeout: 30000
 
 # Second cold start
@@ -21,7 +21,7 @@ appId: ai.talkingrock.lithium.debug
 # Should still work
 - extendedWaitUntil:
     visible:
-      text: "Briefing"
+      text: "Chat"
     timeout: 30000
 
 # Verify all tabs still work after double cold restart
@@ -35,4 +35,4 @@ appId: ai.talkingrock.lithium.debug
 - waitForAnimationToEnd
 
 # App is alive and on the Briefing tab
-- assertVisible: "Briefing"
+- assertVisible: "Chat"
