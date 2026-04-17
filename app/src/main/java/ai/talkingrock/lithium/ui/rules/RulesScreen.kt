@@ -97,7 +97,7 @@ fun RulesScreen(
                             color = MaterialTheme.colorScheme.onBackground
                         )
                         Text(
-                            text = "Approve a suggestion from the Briefing screen, or tap + to create a rule manually.",
+                            text = "Approve a suggestion from Chat, or tap + to create a rule manually.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

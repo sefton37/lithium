@@ -1,0 +1,75 @@
+# Flow: Suggestion-approve E2E — verifies the Chat "Yes, try it" → Rule
+# creation pathway end-to-end, deterministically.
+#
+# The real path (LLM analysis → SuggestionGenerator → Suggestion row) requires
+# ≥5 notifications per app in 24h with low tap rates, which CI seed data does
+# not satisfy. Instead, this flow uses a debug-only SuggestionInjectReceiver
+# (app/src/debug/) that inserts a fresh Report + pending Suggestion directly
+# via DAOs.
+#
+# Where the approval UI lives (spec #41): ChatViewModel subscribes to
+# reportRepository.getLatestUnreviewed() + pending suggestions for that report
+# and appends ChatMessage.SuggestionPrompt entries reactively. The Chat tab's
+# LazyColumn renders each SuggestionPrompt as a SuggestionCard with
+# "Yes, try it" / "No thanks" buttons. The former approval UI on a separate
+# screen was deleted in the same spec — it had been orphaned by the Chat
+# rename and was never reachable from the running nav graph.
+#
+# rule.name after approval comes from suggestion.rationale
+# (RuleRepository.createFromSuggestion → "name = suggestion.rationale"). The
+# injected rationale is "maestro-suggestion-approve", so the Rules tab will
+# show a rule by that name after the approval tap.
+#
+# Prerequisites:
+# - Debug APK installed with SuggestionInjectReceiver registered.
+#   run-tests.sh's manifest-presence check fails early with a clear message
+#   if the APK is stale.
+# - rule-enforcement-helper.py running on 127.0.0.1:18765 (started by
+#   run-tests.sh Phase 3 lifecycle).
+appId: ai.talkingrock.lithium.debug
+---
+- stopApp
+- waitForAnimationToEnd
+- launchApp
+
+- extendedWaitUntil:
+    visible:
+      text: "Chat"
+    timeout: 30000
+
+# --- Inject synthetic Report + Suggestion ---
+# Helper fires INJECT_SUGGESTION broadcast with default extras so the
+# receiver inserts a deterministic rationale ("maestro-suggestion-approve"),
+# action ("suppress"), and conditionJson (PackageMatch com.android.shell).
+- runScript: inject-suggestion.js
+
+# "Yes, try it" should now render on the Chat home — ChatViewModel's init
+# collector observed the newly-inserted unreviewed Report and appended a
+# SuggestionPrompt message, which renders as a SuggestionCard with Yes/No
+# buttons (see ChatScreen.SuggestionCard).
+- extendedWaitUntil:
+    visible:
+      text: "Yes, try it"
+    timeout: 10000
+
+- tapOn: "Yes, try it"
+- waitForAnimationToEnd
+
+# --- Verify the approved rule appears in Rules tab with name == rationale ---
+- tapOn: "Rules"
+- extendedWaitUntil:
+    visible:
+      text: "Rules"
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      text: "maestro-suggestion-approve"
+    timeout: 10000
+- assertVisible: "maestro-suggestion-approve"
+
+# --- Cleanup: delete the rule so subsequent flows are not polluted ---
+# rule.name is exactly "maestro-suggestion-approve" (no cursor-insertion
+# garble path — createFromSuggestion assigns name directly from rationale).
+- tapOn: "Delete rule .*maestro-suggestion-approve.*"
+- waitForAnimationToEnd
+- assertNotVisible: "Delete rule .*maestro-suggestion-approve.*"

@@ -28,5 +28,12 @@
                 <action android:name="ai.talkingrock.lithium.debug.EXPORT_NOTIFICATIONS_PLAINTEXT" />
             </intent-filter>
         </receiver>
+        <receiver
+            android:name="ai.talkingrock.lithium.debug.SuggestionInjectReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="ai.talkingrock.lithium.debug.INJECT_SUGGESTION" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

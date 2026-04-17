@@ -97,6 +97,8 @@ fun ChatScreen(
                         onFieldEdit = viewModel::updateDraftField,
                         onApprove = viewModel::approveRule,
                         onCancel = viewModel::cancelDraft,
+                        onApproveSuggestion = viewModel::approveSuggestion,
+                        onRejectSuggestion = viewModel::rejectSuggestion,
                     )
                 }
                 if (state.isExtracting || state.isBriefingRunning) {
@@ -207,6 +209,8 @@ private fun ChatMessageItem(
     onFieldEdit: (String, (RuleDraftState) -> RuleDraftState) -> Unit,
     onApprove: (RuleDraftState) -> Unit,
     onCancel: () -> Unit,
+    onApproveSuggestion: (ai.talkingrock.lithium.data.model.Suggestion, Long) -> Unit,
+    onRejectSuggestion: (ai.talkingrock.lithium.data.model.Suggestion, Long) -> Unit,
 ) {
     when (msg) {
         is ChatMessage.UserText -> UserBubble(msg.text)
@@ -216,6 +220,59 @@ private fun ChatMessageItem(
         is ChatMessage.RuleDraft -> RuleDraftCard(msg.draft, onFieldEdit, onApprove, onCancel)
         // Q&A assistant answer — rendered as a left-aligned assistant bubble.
         is ChatMessage.AssistantAnswer -> AssistantAnswerBubble(msg.text)
+        // Pending suggestion — approvable card (replaces former BriefingScreen UI).
+        is ChatMessage.SuggestionPrompt -> SuggestionCard(
+            msg = msg,
+            onApprove = { onApproveSuggestion(msg.suggestion, msg.reportId) },
+            onReject = { onRejectSuggestion(msg.suggestion, msg.reportId) },
+        )
+    }
+}
+
+/**
+ * Pending-suggestion approval card. Appears in the chat thread when the DB
+ * has an unreviewed Report with pending suggestions (wired reactively in
+ * ChatViewModel.init). Tapping "Yes, try it" approves → creates a Rule; "No
+ * thanks" rejects. Either action causes the card to disappear on the next
+ * Flow emission (reactive cleanup).
+ */
+@Composable
+private fun SuggestionCard(
+    msg: ChatMessage.SuggestionPrompt,
+    onApprove: () -> Unit,
+    onReject: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text(
+                "Suggested rule",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Text(
+                text = msg.suggestion.rationale.ifBlank { "Unnamed suggestion" },
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+            Text(
+                text = "Action: ${msg.suggestion.action}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 10.dp),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                TextButton(onClick = onReject) { Text("No thanks") }
+                TextButton(onClick = onApprove) { Text("Yes, try it") }
+            }
+        }
     }
 }
 

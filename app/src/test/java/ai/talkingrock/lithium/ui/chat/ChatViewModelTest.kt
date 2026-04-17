@@ -7,6 +7,7 @@ import ai.talkingrock.lithium.ai.RuleExtractor
 import ai.talkingrock.lithium.ai.ToolResult
 import ai.talkingrock.lithium.data.model.Report
 import ai.talkingrock.lithium.data.model.Rule
+import ai.talkingrock.lithium.data.repository.ReportRepository
 import ai.talkingrock.lithium.data.repository.RuleRepository
 import ai.talkingrock.lithium.ui.training.MainDispatcherRule
 import io.mockk.coEvery
@@ -15,6 +16,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -31,6 +33,7 @@ class ChatViewModelTest {
     private lateinit var briefingService: BriefingService
     private lateinit var extractor: RuleExtractor
     private lateinit var ruleRepo: RuleRepository
+    private lateinit var reportRepo: ReportRepository
     private lateinit var llama: LlamaEngine
     private lateinit var dispatcher: ChatToolDispatcher
     private lateinit var vm: ChatViewModel
@@ -39,10 +42,23 @@ class ChatViewModelTest {
         briefingService = mockk()
         extractor = mockk()
         ruleRepo = mockk()
+        reportRepo = mockk()
+        // Default: no unreviewed reports → reactive SuggestionPrompt collector sees
+        // an empty stream, so every test starts with zero suggestion prompts unless
+        // it overrides this stub.
+        every { reportRepo.getLatestUnreviewed() } returns flowOf(null)
         llama = mockk(relaxed = true)
         dispatcher = mockk()
         every { llama.isModelLoaded() } returns true
-        vm = ChatViewModel(briefingService, extractor, ruleRepo, llama, dispatcher, modelDir = "/tmp/models")
+        vm = ChatViewModel(
+            briefingService,
+            extractor,
+            ruleRepo,
+            reportRepo,
+            llama,
+            dispatcher,
+            modelDir = "/tmp/models",
+        )
     }
 
     @Test fun `invokeBriefing appends BriefingResult`() = runTest {

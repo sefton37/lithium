@@ -206,6 +206,20 @@ adb shell cmd notification allow_listener "$LISTENER" 2>&1 || true
 adb shell appops set "$APP_ID" android:get_usage_stats allow 2>&1 || true
 adb shell pm grant "$APP_ID" android.permission.READ_CONTACTS 2>&1 || true
 
+# Debug-receiver manifest-presence check. Flow 18 depends on
+# SuggestionInjectReceiver (app/src/debug/) being present in the installed
+# APK. If the APK on device was built before the receiver was added, the
+# INJECT_SUGGESTION broadcast silently goes nowhere and flow 18 times out.
+# Catch this early with a clear message so the dev knows to reinstall.
+if ! adb shell dumpsys package "$APP_ID" 2>/dev/null | grep -q "INJECT_SUGGESTION"; then
+    echo ""
+    echo "WARNING: installed debug APK does not register INJECT_SUGGESTION receiver."
+    echo "         Flow 18 (suggestion_approve) will fail. To fix:"
+    echo "         cd $REPO_DIR && ./gradlew :app:installDebug"
+    echo "         (or equivalent)"
+    echo ""
+fi
+
 echo "Sending test notifications..."
 adb shell cmd notification post -t "user123 liked your photo" "ig1" "Instagram" 2>&1 || true
 adb shell cmd notification post -t "Flash Sale — 50% off everything today only" "promo1" "ShopApp" 2>&1 || true
@@ -299,6 +313,7 @@ else
         "$SCRIPT_DIR/15_queue_screen.yaml" \
         "$SCRIPT_DIR/16_rule_enforcement.yaml" \
         "$SCRIPT_DIR/17_queue_enforcement.yaml" \
+        "$SCRIPT_DIR/18_suggestion_approve.yaml" \
         $([ "$SKIP_DESTRUCTIVE" = "1" ] || echo "$SCRIPT_DIR/09_purge_data.yaml") \
         "$SCRIPT_DIR/10_stress_navigation.yaml" \
         "$SCRIPT_DIR/11_cold_start.yaml" \

@@ -4,7 +4,6 @@
 
     <!-- Screen titles -->
     <string name="screen_setup">Setup</string>
-    <string name="screen_briefing">Briefing</string>
     <string name="screen_queue">Queue</string>
     <string name="screen_rules">Rules</string>
     <string name="screen_settings">Settings</string>

@@ -268,7 +268,6 @@ private data class MainTab(
 sealed class Screen(val route: String) {
     object Setup    : Screen("setup")
     object Chat     : Screen("chat")
-    object Briefing : Screen("briefing")
     object Queue    : Screen("queue")
     object Rules    : Screen("rules")
     object AddRule  : Screen("add_rule")

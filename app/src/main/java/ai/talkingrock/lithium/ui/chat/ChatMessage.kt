@@ -1,5 +1,7 @@
 package ai.talkingrock.lithium.ui.chat
 
+import ai.talkingrock.lithium.data.model.Suggestion
+
 /**
  * Tools exposed as action cards in the Chat tab.
  *
@@ -89,6 +91,24 @@ sealed class ChatMessage {
      */
     data class AssistantAnswer(
         val text: String,
+        override val timestampMs: Long,
+    ) : ChatMessage()
+
+    /**
+     * A pending AI-generated rule suggestion tied to the latest unreviewed Report.
+     * Rendered as an approvable card in the chat thread; tapping "Yes, try it" creates
+     * a Rule, "No thanks" marks it rejected. This message type replaces the former
+     * BriefingScreen approval UI (deleted per spec #41 — the Briefing tab was
+     * retired during the Briefing→Chat rename and its approval UI was orphaned).
+     *
+     * Appearance is reactive: ChatViewModel's init collector observes
+     * reportRepository.getLatestUnreviewed() + pending suggestions for that report
+     * and rebuilds the SuggestionPrompt set on each emission, so approvals/
+     * rejections self-remove without the user doing anything else.
+     */
+    data class SuggestionPrompt(
+        val suggestion: Suggestion,
+        val reportId: Long,
         override val timestampMs: Long,
     ) : ChatMessage()
 }

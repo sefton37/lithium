@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Helper HTTP server for flow 16 (rule-enforcement E2E) and flow 17 (queue-
-enforcement E2E).
+Helper HTTP server for flow 16 (rule-enforcement E2E), flow 17 (queue-
+enforcement E2E), and flow 18 (suggestion-approve E2E).
 
 Maestro 2.3.0's runScript sandbox (GraalJS) does NOT expose Java interop —
 `java.lang.Runtime` is undefined. But it does expose an `http` global. This
@@ -9,11 +9,15 @@ tiny server bridges adb operations into http calls the JS can make.
 
 Endpoints:
   GET /verify-suppress
-    Trigger tag 'rulet-trig'. Expected disposition by caller: "suppressed".
+    Trigger tag 'rulet-trig'. Caller's JS asserts disposition=='suppressed'.
   GET /verify-queue
-    Trigger tag 'qt-trig'. Expected disposition by caller: "queued".
+    Trigger tag 'qt-trig'. Caller's JS asserts disposition=='queued'.
+  GET /inject-suggestion
+    Fires INJECT_SUGGESTION broadcast at SuggestionInjectReceiver with
+    rationale/action/conditionJson extras so flow 18 can deterministically
+    cause a "Yes, try it" card to render without real LLM analysis.
 
-Both endpoints run the same pipeline:
+verify-suppress/verify-queue pipeline:
     1. adb shell cmd notification post  (trigger notification, title has the
        tag, packageName=com.android.shell)
     2. sleep 1500ms  (async disposition DB write)
@@ -26,8 +30,11 @@ Both endpoints run the same pipeline:
        packageName=='com.android.shell' AND title containing the trigger tag
     8. return {matched, disposition, notifications}
 
-verify-rule-enforcement.js asserts disposition=='suppressed'.
-verify-queue-enforcement.js asserts disposition=='queued'.
+inject-suggestion pipeline:
+    1. adb shell am broadcast INJECT_SUGGESTION with --es extras for rationale,
+       action, conditionJson
+    2. sleep 1000ms  (receiver goAsync + Room insertReport + insertSuggestions)
+    3. return {status: "ok", rationale, action}
 
 Usage:
   rule-enforcement-helper.py [--port 18765]
@@ -48,8 +55,15 @@ TRIGGER_TAG = 'rulet-trig'
 QUEUE_TRIGGER_TAG = 'qt-trig'
 EXPECTED_PACKAGE = 'com.android.shell'
 EXPORT_FILE_ON_DEVICE = '/sdcard/Download/lithium-notifications-export.json'
+EXPORT_ACTION = 'ai.talkingrock.lithium.debug.EXPORT_NOTIFICATIONS_PLAINTEXT'
+INJECT_SUGGESTION_ACTION = 'ai.talkingrock.lithium.debug.INJECT_SUGGESTION'
+DEBUG_PACKAGE = 'ai.talkingrock.lithium.debug'
 DISPOSITION_WAIT_SEC = 1.5
 EXPORT_WRITE_WAIT_SEC = 1.5
+INJECT_WAIT_SEC = 1.0
+DEFAULT_INJECT_RATIONALE = 'maestro-suggestion-approve'
+DEFAULT_INJECT_ACTION = 'suppress'
+DEFAULT_INJECT_CONDITION = '{"type":"package_match","packageName":"com.android.shell"}'
 ADB = os.environ.get('ADB', 'adb')
 ANDROID_SERIAL = os.environ.get('ANDROID_SERIAL', '')
 
@@ -60,6 +74,18 @@ def adb(*args, timeout=30):
         cmd += ['-s', ANDROID_SERIAL]
     cmd += list(args)
     return subprocess.run(cmd, capture_output=True, timeout=timeout)
+
+
+def _do_adb_broadcast(action, package_name, extras=None):
+    """Fire an `adb shell am broadcast` with the given action, package target,
+    and optional string extras (dict of key → value, rendered as `--es <k> <v>`).
+    Returns the completed subprocess result; caller decides whether to inspect
+    the return code / stderr.
+    """
+    args = ['shell', 'am', 'broadcast', '-a', action, '-p', package_name]
+    for k, v in (extras or {}).items():
+        args += ['--es', k, v]
+    return adb(*args)
 
 
 def _do_trigger_and_export(trigger_tag):
@@ -82,9 +108,7 @@ def _do_trigger_and_export(trigger_tag):
     # path is empty when it fires.
     adb('shell', 'rm', '-f', EXPORT_FILE_ON_DEVICE)
 
-    adb('shell', 'am', 'broadcast',
-        '-a', 'ai.talkingrock.lithium.debug.EXPORT_NOTIFICATIONS_PLAINTEXT',
-        '-p', 'ai.talkingrock.lithium.debug')
+    _do_adb_broadcast(EXPORT_ACTION, DEBUG_PACKAGE)
     time.sleep(EXPORT_WRITE_WAIT_SEC)
 
     with tempfile.NamedTemporaryFile(suffix='.json', delete=False) as tf:
@@ -130,6 +154,41 @@ def verify_queue():
     return _do_trigger_and_export(QUEUE_TRIGGER_TAG)
 
 
+def inject_suggestion():
+    """Flow 18 endpoint. Fires INJECT_SUGGESTION at SuggestionInjectReceiver
+    with default rationale/action/conditionJson, waits for the async Room
+    write, and returns the injected rationale+action so the caller's JS can
+    confirm the request reached the helper.
+
+    The receiver inserts a Report (via markAllReviewed + insertReport) and a
+    pending Suggestion referencing that report's id — together these cause
+    BriefingViewModel to emit a non-empty suggestions list, which renders
+    the "Yes, try it" card on the Chat/Briefing home.
+    """
+    # am broadcast's --es parsing on-device mangles values containing `:` into
+    # the intent's data URI ("dat=packageName:" in the logs), which corrupts
+    # the overall intent extras. The receiver's DEFAULT_CONDITION (declared in
+    # SuggestionInjectReceiver.kt) matches exactly what we want for flow 18
+    # (rationale="maestro-suggestion-approve", action="suppress", conditionJson
+    # = PackageMatch com.android.shell), so we skip passing extras entirely
+    # and let the receiver use its defaults. This avoids an on-device shell
+    # escaping round-trip.
+    rationale = DEFAULT_INJECT_RATIONALE
+    action = DEFAULT_INJECT_ACTION
+    result = _do_adb_broadcast(INJECT_SUGGESTION_ACTION, DEBUG_PACKAGE)
+    time.sleep(INJECT_WAIT_SEC)
+    if result.returncode != 0:
+        return 502, {
+            'error': 'adb broadcast failed',
+            'stderr': result.stderr.decode(errors='replace'),
+        }
+    return 200, {
+        'status': 'ok',
+        'rationale': rationale,
+        'action': action,
+    }
+
+
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = self.path.rstrip('/')
@@ -137,6 +196,8 @@ class Handler(BaseHTTPRequestHandler):
             status, body = verify_suppress()
         elif path == '/verify-queue':
             status, body = verify_queue()
+        elif path == '/inject-suggestion':
+            status, body = inject_suggestion()
         else:
             status, body = 404, {'error': 'unknown endpoint', 'path': self.path}
         raw = json.dumps(body).encode('utf-8')

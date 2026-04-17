@@ -10,11 +10,17 @@ import ai.talkingrock.lithium.ai.RuleExtractor
 import ai.talkingrock.lithium.ai.ToolResult
 import ai.talkingrock.lithium.data.model.Rule
 import ai.talkingrock.lithium.data.model.RuleCondition
+import ai.talkingrock.lithium.data.model.Suggestion
+import ai.talkingrock.lithium.data.repository.ReportRepository
 import ai.talkingrock.lithium.data.repository.RuleRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
@@ -40,6 +46,7 @@ class ChatViewModel @Inject constructor(
     private val briefingService: BriefingService,
     private val ruleExtractor: RuleExtractor,
     private val ruleRepository: RuleRepository,
+    private val reportRepository: ReportRepository,
     private val llamaEngine: LlamaEngine,
     private val chatToolDispatcher: ChatToolDispatcher,
     @Named("modelDir") private val modelDir: String,
@@ -49,6 +56,40 @@ class ChatViewModel @Inject constructor(
     val state: StateFlow<ChatUiState> = _state.asStateFlow()
 
     private val json = Json { ignoreUnknownKeys = true }
+
+    // Reactive wiring for SuggestionPrompt messages — replaces the former
+    // BriefingScreen approval UI (deleted per spec #41). When the DB has an
+    // unreviewed Report with pending suggestions, we append a SuggestionPrompt
+    // per suggestion into the message thread. On each emission we rebuild the
+    // SuggestionPrompt-typed subset of messages so approvals/rejections self-
+    // remove as soon as the Room flow re-emits with fewer pending rows. Non-
+    // suggestion messages (UserText, BriefingResult, RuleDraft, etc.) are
+    // preserved untouched.
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val pendingSuggestionsFlow = reportRepository.getLatestUnreviewed()
+        .flatMapLatest { report ->
+            if (report == null) flowOf(Pair<Long, List<Suggestion>>(0L, emptyList()))
+            else reportRepository.getPendingForReport(report.id)
+                .map { suggestions -> Pair(report.id, suggestions) }
+        }
+
+    init {
+        viewModelScope.launch {
+            pendingSuggestionsFlow.collect { (reportId, suggestions) ->
+                _state.update { ui ->
+                    val nonPrompts = ui.messages.filterNot { it is ChatMessage.SuggestionPrompt }
+                    val prompts = suggestions.map { s ->
+                        ChatMessage.SuggestionPrompt(
+                            suggestion = s,
+                            reportId = reportId,
+                            timestampMs = System.currentTimeMillis(),
+                        )
+                    }
+                    ui.copy(messages = nonPrompts + prompts)
+                }
+            }
+        }
+    }
 
     fun updateInputDraft(text: String) {
         _state.update { it.copy(inputDraft = text) }
@@ -279,6 +320,44 @@ class ChatViewModel @Inject constructor(
                 messages = ui.messages.filterNot { it is ChatMessage.RuleDraft },
                 activeTool = null,
             )
+        }
+    }
+
+    /**
+     * Approves a pending suggestion:
+     *  1. Creates an approved Rule from the suggestion's condition JSON via
+     *     [RuleRepository.createFromSuggestion].
+     *  2. Marks the suggestion "approved" in the DB (no comment draft in the
+     *     Chat UI — comment UX was a BriefingScreen feature that did not
+     *     migrate; pass null).
+     *  3. If the Report has no more pending suggestions, marks it reviewed —
+     *     which causes `getLatestUnreviewed()` to emit null and all prompts
+     *     to disappear from the thread.
+     * Migrated from the retired BriefingViewModel.approveSuggestion (spec #41).
+     */
+    fun approveSuggestion(suggestion: Suggestion, reportId: Long) {
+        viewModelScope.launch {
+            ruleRepository.createFromSuggestion(suggestion)
+            reportRepository.updateSuggestionStatus(suggestion.id, "approved", null)
+            autoMarkReviewedIfDone(reportId)
+        }
+    }
+
+    /**
+     * Rejects a pending suggestion. No rule is created. See [approveSuggestion]
+     * for the reactive-removal semantics.
+     */
+    fun rejectSuggestion(suggestion: Suggestion, reportId: Long) {
+        viewModelScope.launch {
+            reportRepository.updateSuggestionStatus(suggestion.id, "rejected", null)
+            autoMarkReviewedIfDone(reportId)
+        }
+    }
+
+    private suspend fun autoMarkReviewedIfDone(reportId: Long) {
+        val remaining = reportRepository.countPendingSuggestions(reportId)
+        if (remaining == 0) {
+            reportRepository.markReviewed(reportId)
         }
     }
 
