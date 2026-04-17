@@ -1,32 +1,39 @@
 #!/usr/bin/env python3
 """
-Helper HTTP server for flow 16 (rule-enforcement E2E).
+Helper HTTP server for flow 16 (rule-enforcement E2E) and flow 17 (queue-
+enforcement E2E).
 
 Maestro 2.3.0's runScript sandbox (GraalJS) does NOT expose Java interop —
 `java.lang.Runtime` is undefined. But it does expose an `http` global. This
 tiny server bridges adb operations into http calls the JS can make.
 
-Endpoint:
+Endpoints:
   GET /verify-suppress
-    1. adb shell cmd notification post  (trigger notification, title has
-       'rulet-trig', packageName=com.android.shell)
-    2. sleep 1500ms  (async disposition DB write)
-    3. adb shell am broadcast EXPORT_NOTIFICATIONS_PLAINTEXT
-    4. sleep 1500ms  (goAsync + IO write)
-    5. adb pull /sdcard/Download/lithium-notifications-export.json
-    6. parse ExportPayload.notifications, find newest record with
-       packageName=='com.android.shell' AND title containing 'rulet-trig'
-    7. return {matched, disposition, notifications}
+    Trigger tag 'rulet-trig'. Expected disposition by caller: "suppressed".
+  GET /verify-queue
+    Trigger tag 'qt-trig'. Expected disposition by caller: "queued".
 
-The JS in verify-rule-enforcement.js asserts matched=true and
-disposition=='suppressed', throwing otherwise.
+Both endpoints run the same pipeline:
+    1. adb shell cmd notification post  (trigger notification, title has the
+       tag, packageName=com.android.shell)
+    2. sleep 1500ms  (async disposition DB write)
+    3. adb shell rm -f <export file>  (scoped-storage EACCES workaround —
+       app cannot overwrite an existing file it previously created)
+    4. adb shell am broadcast EXPORT_NOTIFICATIONS_PLAINTEXT
+    5. sleep 1500ms  (goAsync + IO write)
+    6. adb pull /sdcard/Download/lithium-notifications-export.json
+    7. parse ExportPayload.notifications, find newest record with
+       packageName=='com.android.shell' AND title containing the trigger tag
+    8. return {matched, disposition, notifications}
+
+verify-rule-enforcement.js asserts disposition=='suppressed'.
+verify-queue-enforcement.js asserts disposition=='queued'.
 
 Usage:
   rule-enforcement-helper.py [--port 18765]
 
 Lifecycle:
-  run-tests.sh starts this server at the top of Phase 3 and kills it after
-  the suite completes.
+  run-tests.sh starts this server after Phase 2.5 and kills it on EXIT trap.
 """
 import argparse
 import json
@@ -38,6 +45,7 @@ import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 TRIGGER_TAG = 'rulet-trig'
+QUEUE_TRIGGER_TAG = 'qt-trig'
 EXPECTED_PACKAGE = 'com.android.shell'
 EXPORT_FILE_ON_DEVICE = '/sdcard/Download/lithium-notifications-export.json'
 DISPOSITION_WAIT_SEC = 1.5
@@ -54,10 +62,18 @@ def adb(*args, timeout=30):
     return subprocess.run(cmd, capture_output=True, timeout=timeout)
 
 
-def verify_suppress():
+def _do_trigger_and_export(trigger_tag):
+    """Post a notification with `trigger_tag` in its title, broadcast the
+    DbExportReceiver, pull the resulting JSON, and return the newest
+    matching record's disposition.
+
+    The returned `disposition` can be any value the engine wrote: "suppressed"
+    from a Suppress rule, "queued" from a Queue rule, "allowed" when no user
+    rule matches, etc. The caller's JS decides what value is acceptable.
+    """
     adb('shell', 'cmd', 'notification', 'post',
-        '-t', f'rule-enforcement-trigger-{TRIGGER_TAG}',
-        'rulet-trigger-tag', 'TriggerApp')
+        '-t', f'trigger-{trigger_tag}',
+        f'{trigger_tag}-tag', 'TriggerApp')
     time.sleep(DISPOSITION_WAIT_SEC)
 
     # Delete any stale export file. On Android 11+ with scoped storage, the app
@@ -93,7 +109,7 @@ def verify_suppress():
     for n in records:
         if (n.get('packageName') == EXPECTED_PACKAGE
                 and n.get('title')
-                and TRIGGER_TAG in n['title']):
+                and trigger_tag in n['title']):
             if match is None or n.get('postedAtMs', 0) > match.get('postedAtMs', 0):
                 match = n
 
@@ -104,10 +120,23 @@ def verify_suppress():
     }
 
 
+def verify_suppress():
+    """Flow 16 endpoint. Caller's JS asserts disposition=='suppressed'."""
+    return _do_trigger_and_export(TRIGGER_TAG)
+
+
+def verify_queue():
+    """Flow 17 endpoint. Caller's JS asserts disposition=='queued'."""
+    return _do_trigger_and_export(QUEUE_TRIGGER_TAG)
+
+
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        if self.path.rstrip('/') == '/verify-suppress':
+        path = self.path.rstrip('/')
+        if path == '/verify-suppress':
             status, body = verify_suppress()
+        elif path == '/verify-queue':
+            status, body = verify_queue()
         else:
             status, body = 404, {'error': 'unknown endpoint', 'path': self.path}
         raw = json.dumps(body).encode('utf-8')

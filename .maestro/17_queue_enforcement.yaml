@@ -1,0 +1,189 @@
+# Flow: Queue-action E2E — verifies the full Queue pipeline:
+#   (a) a user-created Queue PackageMatch rule produces disposition="queued" in
+#       the notifications table (DB-level, via DbExportReceiver);
+#   (b) the matched notification surfaces as a card in the Queue tab UI;
+#   (c) tapping the Release button drains the pending queue (status transitions
+#       pending → actioned, removed from getPendingQueueItems WHERE status='pending');
+#   (d) tapping Clear reviewed is a safe, crash-free cleanup of actioned rows.
+#
+# Engine constraint (same as flow 16): ShadeModeSeeder's Tier-2 Queue seed rule
+# matches tier=2 adb-posted notifications before any user PackageMatch rule in
+# the first-match-wins engine. Flow disables the seed rule at start, re-enables
+# at cleanup — identical idempotency guards as flow 16.
+#
+# Test pollution note: Phase 2 test notifications already landed in the Queue
+# (they were matched by the seed Queue rule while it was active between flow 16
+# cleanup and flow 17 start). The flow therefore releases ALL pending items in
+# a bounded loop to reach an empty state before asserting "Release notification"
+# is notVisible. This is the unambiguous absence check.
+#
+# Prerequisites: Phase 2 permissions granted + test notifications posted so
+# com.android.shell is in the observed-apps dropdown.
+appId: ai.talkingrock.lithium.debug
+---
+- stopApp
+- waitForAnimationToEnd
+- launchApp
+
+- extendedWaitUntil:
+    visible:
+      text: "Chat"
+    timeout: 30000
+
+# --- Rules tab: clear pre-existing user rules that target com.android.shell ---
+# Flow 05 creates a Suppress rule for com.android.shell and does not clean up.
+# That rule has an earlier createdAtMs than ours, so it would fire first and
+# short-circuit the engine to "suppressed" before our Queue rule gets a chance
+# (first-match-wins — RuleEngine.kt:70-80). We sweep any user rule whose
+# contentDescription contains "com.android.shell" before creating ours.
+# Bounded loop (5 iterations) is well above the expected orphan count (1-2).
+- tapOn: "Rules"
+- extendedWaitUntil:
+    visible:
+      text: "Rules"
+    timeout: 10000
+
+- repeat:
+    times: 5
+    commands:
+      - runFlow:
+          when:
+            visible: "Delete rule .*com\\.android\\.shell.*"
+          commands:
+            - tapOn: "Delete rule .*com\\.android\\.shell.*"
+            - waitForAnimationToEnd
+
+# --- Disable Tier-2 Queue seed rule (idempotent) ---
+- runFlow:
+    when:
+      visible: "Disable rule Queue Tier 2 (worth seeing)"
+    commands:
+      - tapOn: "Disable rule Queue Tier 2 (worth seeing)"
+      - waitForAnimationToEnd
+
+# --- Add Rule: com.android.shell + Queue + description maestro-queue-enforcement ---
+- tapOn: "Add rule"
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible:
+      text: "New Rule"
+    timeout: 20000
+
+- tapOn: "App"
+- waitForAnimationToEnd
+- tapOn: "com.android.shell"
+- waitForAnimationToEnd
+
+# Action dropdown label is "Queue for later" (AddRuleViewModel.kt:24, enum
+# RuleActionOption.QUEUE.label). Unambiguous vs. the bottom-nav "Queue" tab.
+- tapOn: "Action"
+- extendedWaitUntil:
+    visible:
+      text: "Queue for later"
+    timeout: 5000
+- tapOn: "Queue for later"
+- waitForAnimationToEnd
+
+# Description LAST (field-ordering invariant from 05_create_rule.yaml:83-86).
+# eraseText clears the auto-description before inputText prepends — same
+# cursor-position workaround as flow 16.
+- tapOn: "Description"
+- eraseText
+- inputText: "maestro-queue-enforcement"
+- hideKeyboard
+
+- tapOn: "Save Rule"
+- extendedWaitUntil:
+    visible:
+      text: "Rules"
+    timeout: 10000
+
+# --- DB-level assertion: /verify-queue helper posts qt-trig trigger, broadcasts
+#     EXPORT_NOTIFICATIONS_PLAINTEXT to DbExportReceiver, pulls the JSON, asserts
+#     the newest matching record has disposition=="queued". ---
+- runScript: verify-queue-enforcement.js
+
+# --- UI-level assertions: Queue tab shows the item ---
+- tapOn: "Queue"
+- extendedWaitUntil:
+    visible:
+      text: "Queued notification from com.android.shell"
+    timeout: 10000
+
+- assertVisible: "Queued notification from com.android.shell"
+
+# Scroll to our specific trigger (ordered ASC by queued_at_ms in QueueDao.kt:35,
+# so newest trigger is at the bottom).
+- scrollUntilVisible:
+    element:
+      text: "trigger-qt-trig"
+    direction: DOWN
+    centerElement: true
+- assertVisible: "trigger-qt-trig"
+
+# --- Release + Clear-reviewed order matters ---
+# QueueScreen renders EmptyQueueState when pending list is empty (line 78-85),
+# and the "Clear all reviewed" button lives inside QueueContent — so the button
+# DISAPPEARS once the queue is drained. We therefore tap Release once first
+# (which transitions one row pending → actioned), then tap Clear reviewed
+# (wipes the actioned row) while other pending cards still hold the button
+# on screen, and only then drain the rest.
+
+# Tap Release on the first card — may or may not be our specific trigger
+# (ordering is queued_at_ms ASC per QueueDao.kt:35, so oldest first). Either
+# way, the tap exercises the Release pathway and produces one actioned row.
+- tapOn: "Release notification"
+- waitForAnimationToEnd
+
+# Clear all reviewed: deletes the actioned row we just created. Safe even if
+# there are no actioned rows. Button is still visible because other pending
+# items remain (Phase 2 seeded ~5 notifications, plus our trigger).
+#
+# Known limitation (auditor-flagged, accepted): release() above is an async
+# Room write on Dispatchers.IO. In a pathological race the markReviewed row
+# may not be committed when clearReviewed() runs here, in which case Clear
+# reviewed deletes 0 actioned rows — test still passes, the Clear pathway is
+# verified only procedurally (no crash), not semantically (≥1 row cleared).
+# Mitigating factors: Room writes typically complete in tens of ms; the
+# extendedWaitUntil below (followed by Maestro's inter-step settle time) adds
+# additional slack; 3 consecutive CI runs have shown no flakiness. A stricter
+# check would add a /query-queue-status helper endpoint and assert pre/post
+# counts — deferred to a future increment if this ever becomes flaky.
+- tapOn: "Clear all reviewed"
+- waitForAnimationToEnd
+
+# --- Drain remaining pending items so the absence assertion is unambiguous ---
+# Phase-2 seeds (~5) + our trigger (1) + minor onboarding posts, with headroom.
+- repeat:
+    times: 20
+    commands:
+      - runFlow:
+          when:
+            visible: "Release notification"
+          commands:
+            - tapOn: "Release notification"
+            - waitForAnimationToEnd
+
+# Queue is empty — no more Release buttons rendered.
+- assertNotVisible: "Release notification"
+
+# --- Cleanup 1/2: delete our Queue rule ---
+# rule.name may be clean ("maestro-queue-enforcement") or garbled by the
+# cursor-insertion bug — the substring survives either way, so the regex
+# selector catches both forms.
+- tapOn: "Rules"
+- extendedWaitUntil:
+    visible:
+      text: "Rules"
+    timeout: 10000
+- tapOn: "Delete rule .*maestro-queue-enforcement.*"
+- waitForAnimationToEnd
+- assertNotVisible: "Delete rule .*maestro-queue-enforcement.*"
+
+# --- Cleanup 2/2: re-enable Tier-2 Queue seed rule (idempotent) ---
+- runFlow:
+    when:
+      visible: "Enable rule Queue Tier 2 (worth seeing)"
+    commands:
+      - tapOn: "Enable rule Queue Tier 2 (worth seeing)"
+      - waitForAnimationToEnd
