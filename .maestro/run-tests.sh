@@ -237,6 +237,41 @@ fi
 write_row "complete-onboarding" "$LAST_FLOW_RESULT" "$LAST_FLOW_ELAPSED" "$LAST_MAESTRO_DIR"
 
 # -----------------------------------------------------------------
+# Helper: rule-enforcement HTTP bridge (required by flow 16).
+# Maestro 2.x's runScript sandbox has no Java interop, so adb operations
+# for flow 16 are delegated via http.get calls to this local server. We
+# start it after onboarding (the rule-enforcement flow needs a post-
+# onboarding app state anyway) and ensure it dies on exit.
+# -----------------------------------------------------------------
+RULE_HELPER_PORT=18765
+RULE_HELPER_PID=""
+if [ -f "$SCRIPT_DIR/rule-enforcement-helper.py" ]; then
+    ANDROID_SERIAL="${ANDROID_SERIAL:-}" python3 "$SCRIPT_DIR/rule-enforcement-helper.py" \
+        --port "$RULE_HELPER_PORT" >> "$RESULTS_DIR/rule-enforcement-helper.log" 2>&1 &
+    RULE_HELPER_PID=$!
+    # Give the server a moment to bind
+    for _ in 1 2 3 4 5; do
+        if curl -fsS "http://127.0.0.1:$RULE_HELPER_PORT/__nonexistent__" \
+                -o /dev/null 2>&1 \
+            || curl -fsS -I "http://127.0.0.1:$RULE_HELPER_PORT/" -o /dev/null 2>&1 \
+            || nc -z 127.0.0.1 "$RULE_HELPER_PORT" 2>/dev/null; then
+            break
+        fi
+        sleep 0.3
+    done
+    echo "rule-enforcement helper: PID=$RULE_HELPER_PID port=$RULE_HELPER_PORT"
+fi
+
+cleanup_helper() {
+    if [ -n "$RULE_HELPER_PID" ] && kill -0 "$RULE_HELPER_PID" 2>/dev/null; then
+        kill "$RULE_HELPER_PID" 2>/dev/null || true
+        wait "$RULE_HELPER_PID" 2>/dev/null || true
+        echo "rule-enforcement helper: stopped (PID=$RULE_HELPER_PID)"
+    fi
+}
+trap cleanup_helper EXIT
+
+# -----------------------------------------------------------------
 # Phase 3: Main suite (or single flow if specified)
 # -----------------------------------------------------------------
 if [ -n "$1" ]; then
@@ -262,6 +297,7 @@ else
         "$SCRIPT_DIR/13_training_tab.yaml" \
         "$SCRIPT_DIR/14_suggestion_approve.yaml" \
         "$SCRIPT_DIR/15_queue_screen.yaml" \
+        "$SCRIPT_DIR/16_rule_enforcement.yaml" \
         $([ "$SKIP_DESTRUCTIVE" = "1" ] || echo "$SCRIPT_DIR/09_purge_data.yaml") \
         "$SCRIPT_DIR/10_stress_navigation.yaml" \
         "$SCRIPT_DIR/11_cold_start.yaml" \

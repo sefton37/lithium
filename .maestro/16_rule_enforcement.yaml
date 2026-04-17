@@ -1,0 +1,121 @@
+# Flow: Rule-enforcement E2E — verifies that a user-created Suppress PackageMatch
+# rule actually produces disposition="suppressed" on a matched notification. This
+# is the core rule-engine contract, previously covered only at the unit-test
+# layer.
+#
+# Engine constraint (seed rules): ShadeModeSeeder inserts 4 tier-based rules on
+# first shade-mode activation, in createdAtMs order:
+#   Tier 3 → allow,  Tier 2 → queue,  Tier 1 → suppress,  Tier 0 → suppress.
+# RuleEngine.evaluate iterates rules oldest-first with first-match-wins. adb-
+# posted notifications default to tier=2, so the "Queue Tier 2" seed rule matches
+# BEFORE any user-created PackageMatch rule and short-circuits the dispatch. To
+# test a user PackageMatch rule in isolation, we disable the Tier-2 Queue seed
+# rule at the start of the flow and re-enable it during cleanup. Tier 3 Allow,
+# Tier 1 Suppress, Tier 0 Suppress remain active but don't match tier=2, so our
+# PackageMatch rule gets a chance to evaluate.
+#
+# Prerequisites: Phase 2 permissions granted + test notifications posted, so
+# com.android.shell is in the observed-apps dropdown and ShadeModeSeeder has run.
+appId: ai.talkingrock.lithium.debug
+---
+- stopApp
+- waitForAnimationToEnd
+- launchApp
+
+- extendedWaitUntil:
+    visible:
+      text: "Chat"
+    timeout: 30000
+
+# --- Navigate to Rules ---
+- tapOn: "Rules"
+- extendedWaitUntil:
+    visible:
+      text: "Rules"
+    timeout: 10000
+
+# --- Disable the Tier-2 Queue seed rule (see engine-constraint note above) ---
+# Toggle switch on each RuleCard has contentDescription "Disable rule <name>"
+# when the rule is currently approved and "Enable rule <name>" when disabled
+# (RulesScreen.kt:201-207). This step is guarded so the flow is idempotent
+# across reruns where the seed rule may already be disabled from a prior
+# aborted run.
+- runFlow:
+    when:
+      visible: "Disable rule Queue Tier 2 (worth seeing)"
+    commands:
+      - tapOn: "Disable rule Queue Tier 2 (worth seeing)"
+      - waitForAnimationToEnd
+
+# --- Open Add Rule form ---
+- tapOn: "Add rule"
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible:
+      text: "New Rule"
+    timeout: 20000
+
+# --- App: com.android.shell (the only package adb-posted notifications use) ---
+- tapOn: "App"
+- waitForAnimationToEnd
+- tapOn: "com.android.shell"
+- waitForAnimationToEnd
+
+# --- Action: Suppress ---
+- tapOn: "Action"
+- extendedWaitUntil:
+    visible:
+      text: "Suppress"
+    timeout: 5000
+- tapOn: "Suppress"
+- waitForAnimationToEnd
+
+# --- Description LAST (field-ordering invariant from 05_create_rule.yaml:83-86) ---
+# selectPackage/selectAction regenerate an auto-description like "Suppress
+# notifications from com.android.shell" into the Description field. Tapping
+# the field puts the cursor mid-word, and inputText INSERTS at that cursor
+# rather than replacing, yielding names like "Suppmaestro-rule-enforcementress
+# notifications from com.android.shell". eraseText clears the field first so
+# the typed description lands clean.
+- tapOn: "Description"
+- eraseText
+- inputText: "maestro-rule-enforcement"
+- hideKeyboard
+
+- tapOn: "Save Rule"
+- extendedWaitUntil:
+    visible:
+      text: "Rules"
+    timeout: 10000
+
+# --- Trigger + export + verify disposition == "suppressed" ---
+# The runScript sandbox (GraalJS) has no Java interop, so adb operations are
+# delegated to a local HTTP helper (rule-enforcement-helper.py) started by
+# run-tests.sh around this flow. The helper posts the trigger, fires the
+# EXPORT_NOTIFICATIONS_PLAINTEXT broadcast to DbExportReceiver, pulls the JSON,
+# finds the matching record, and returns {matched, disposition, notifications}.
+# verify-rule-enforcement.js throws if the returned disposition is anything
+# other than "suppressed".
+- runScript: verify-rule-enforcement.js
+
+# --- Cleanup 1/2: delete our PackageMatch rule ---
+# contentDescription is "Delete rule <rule.name>". rule.name is set to
+# state.description (AddRuleViewModel:133) which may be the clean typed string
+# OR a garbled variant when the inputText insert collides with the auto-
+# description the UI regenerates on field focus. We use a regex match on any
+# contentDescription containing "maestro-rule-enforcement" as a substring —
+# the substring survives cursor-position insertion artifacts.
+- tapOn: "Delete rule .*maestro-rule-enforcement.*"
+- waitForAnimationToEnd
+- assertNotVisible: "Delete rule .*maestro-rule-enforcement.*"
+
+# --- Cleanup 2/2: re-enable the Tier-2 Queue seed rule for subsequent flows ---
+# Guarded so the flow is idempotent: we only toggle back on if the rule is
+# currently disabled (it may already be enabled if the disable step above was
+# skipped because the rule started enabled but a prior bug left it enabled).
+- runFlow:
+    when:
+      visible: "Enable rule Queue Tier 2 (worth seeing)"
+    commands:
+      - tapOn: "Enable rule Queue Tier 2 (worth seeing)"
+      - waitForAnimationToEnd
