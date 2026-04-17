@@ -1,0 +1,77 @@
+# Flow: Q&A plumbing E2E — verifies the Ask tool-launcher wiring without any
+# LLM dependency. Scope per spec #42: tap Ask → system message appears → input
+# bar activates → type → submit → UserText bubble shows typed text. STOPS
+# before the LLM 2-pass loop produces an answer.
+#
+# Why LLM output is out of scope: submitQaInput runs llamaEngine.generate
+# twice (Pass 1 tool-pick → dispatcher → Pass 2 natural-language answer).
+# On emulator CPU inference this is 30s-5min and output content is not
+# deterministic. Unit tests (ChatToolDispatcherTest, prompt-parsing) cover
+# the LLM-dependent parsing. This flow's value is catching regressions in
+# UI wiring only: the tap → startQaMode() → state transition → input-bar
+# render → submitQaInput entry point → synchronous UserText append.
+#
+# Key code references (grounded in spec #42 §4):
+#   - ChatScreen.kt:169   ToolCard(label = "Ask")
+#   - ChatScreen.kt:280   UserBubble renders ChatMessage.UserText.text
+#   - ChatScreen.kt:499   IconButton(onSend) with contentDescription="Send"
+#   - ChatViewModel.kt:148 startQaMode() → appendMessage SystemMessage
+#   - ChatViewModel.kt:153 system message: "Ask me anything about your
+#                          notification history."
+#   - ChatViewModel.kt:166 submitQaInput — appends UserText BEFORE the
+#                          LLM call (so the assertion below is reachable
+#                          without waiting for inference)
+#
+# Cold start: stopApp/launchApp drops the ChatViewModel instance — message
+# thread starts empty. Flow 18 runs earlier in the suite and fully resolves
+# its injected Report (approves + autoMarkReviewedIfDone), so no leftover
+# SuggestionPrompt pollutes flow 19's thread.
+appId: ai.talkingrock.lithium.debug
+---
+- stopApp
+- waitForAnimationToEnd
+- launchApp
+
+- extendedWaitUntil:
+    visible:
+      text: "Chat"
+    timeout: 30000
+
+# --- Tap the Ask tool card ---
+- tapOn: "Ask"
+- waitForAnimationToEnd
+
+# startQaMode() appends this SystemMessage — proves the tap transitioned
+# state and the composable re-rendered. If it doesn't appear, the Ask tap
+# either didn't land or startQaMode() regressed.
+- extendedWaitUntil:
+    visible:
+      text: "Ask me anything about your notification history."
+    timeout: 5000
+
+# --- Type a deterministic question and submit ---
+# Placeholder "Ask about your notification history…" confirms input bar
+# is in QA mode (activeTool == ChatTool.QA gates the input bar render —
+# see ChatScreen.kt:109).
+- tapOn: "Ask about your notification history…"
+- inputText: "maestro-qa-ping"
+- hideKeyboard
+
+# Send icon — IconButton(onSend) with contentDescription="Send" at
+# ChatScreen.kt:499. Enabled only when value.isNotBlank(), so the
+# inputText above must land before this tap.
+- tapOn: "Send"
+- waitForAnimationToEnd
+
+# --- Assert UserText bubble rendered with the typed content ---
+# submitQaInput() appends ChatMessage.UserText synchronously (line 169)
+# BEFORE launching the LLM coroutine (line 171). This assertion is
+# reachable without waiting for the LLM output.
+- extendedWaitUntil:
+    visible:
+      text: "maestro-qa-ping"
+    timeout: 5000
+- assertVisible: "maestro-qa-ping"
+
+# Flow exits here by design. The LLM 2-pass loop runs in the background
+# but the flow does NOT wait on its output (by scope — see spec #42).

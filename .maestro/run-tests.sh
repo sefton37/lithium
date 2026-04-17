@@ -314,6 +314,7 @@ else
         "$SCRIPT_DIR/16_rule_enforcement.yaml" \
         "$SCRIPT_DIR/17_queue_enforcement.yaml" \
         "$SCRIPT_DIR/18_suggestion_approve.yaml" \
+        "$SCRIPT_DIR/19_qa_plumbing.yaml" \
         $([ "$SKIP_DESTRUCTIVE" = "1" ] || echo "$SCRIPT_DIR/09_purge_data.yaml") \
         "$SCRIPT_DIR/10_stress_navigation.yaml" \
         "$SCRIPT_DIR/11_cold_start.yaml" \
