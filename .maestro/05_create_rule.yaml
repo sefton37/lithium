@@ -103,3 +103,28 @@ appId: ai.talkingrock.lithium.debug
             visible: "maestro-05-rule"
           commands:
             - assertVisible: "maestro-05-rule"
+      # --- Edit/delete pathway (spec #39) ---
+      # Covers RulesScreen toggle + delete UI. rule.name is fed by
+      # state.description.ifBlank { buildDescription(...) } (AddRuleViewModel.kt
+      # line 133-134), and the Description field suffers the same cursor-
+      # position insertion issue as flows 16/17 (typed text is spliced into
+      # the auto-generated "Suppress notifications from <pkg>" mid-word). The
+      # substring "maestro-05-rule" survives the splice, so regex selectors
+      # below catch both clean and garbled rule names.
+      # Toggle: disable → assert Disabled status → enable → assert Approved.
+      - tapOn: "Disable rule .*maestro-05-rule.*"
+      - waitForAnimationToEnd
+      - assertVisible: "Disabled"
+      - tapOn: "Enable rule .*maestro-05-rule.*"
+      - waitForAnimationToEnd
+      - assertVisible: "Approved"
+      # Per-rule falsifiable check (auditor-requested, spec #39 DOD-14 gap):
+      # "Approved" alone is unfalsifiable because 4 seed rules always render
+      # "Approved" badges. After the enable tap, our rule's toggle switch must
+      # flip its contentDescription back to "Disable rule <name>" — meaningful
+      # per-rule signal that toggleRule actually changed rule.status.
+      - assertVisible: "Disable rule .*maestro-05-rule.*"
+      # Delete: remove the rule and confirm absence.
+      - tapOn: "Delete rule .*maestro-05-rule.*"
+      - waitForAnimationToEnd
+      - assertNotVisible: "Delete rule .*maestro-05-rule.*"
