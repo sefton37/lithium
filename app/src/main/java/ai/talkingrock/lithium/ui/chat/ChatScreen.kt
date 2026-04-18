@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -68,10 +69,17 @@ fun ChatScreen(
     }
 
     Scaffold { inner ->
+        // imePadding on the outer Column so the LazyColumn shrinks and the
+        // ChatInputBar stays above the keyboard — fixes issue #68 where the
+        // Android IME occluded the text field on Pixel. MainActivity enables
+        // edge-to-edge layout (setDecorFitsSystemWindows=false), which makes
+        // AndroidManifest's windowSoftInputMode="adjustResize" insufficient on
+        // its own; Compose must consume the IME inset explicitly.
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(inner),
+                .padding(inner)
+                .imePadding(),
         ) {
             ToolLauncher(
                 isBriefingRunning = state.isBriefingRunning,
